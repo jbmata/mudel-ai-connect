@@ -1,0 +1,7 @@
+{
+  "name": "moodle",
+  "version": "0.1.0",
+  "description": "Consulta tus asignaturas, materiales y fechas de Moodle y estudia con fuentes.",
+  "mcpServers": "./.mcp.json",
+  "icon": "./assets/logo.png"
+}
