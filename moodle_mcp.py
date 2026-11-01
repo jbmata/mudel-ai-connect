@@ -16,6 +16,8 @@ from urllib.parse import parse_qsl, unquote, urlencode, urlsplit, urlunsplit
 import httpx
 from dotenv import load_dotenv
 from mcp.server import MCPServer
+from mcp.server.auth.middleware.auth_context import get_access_token
+from mcp.server.auth.provider import AccessToken
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
@@ -167,7 +169,18 @@ class MoodleClient:
         return self.request(url, {"token": self.token})
 
 
+class MoodleAccessToken(AccessToken):
+    # Estos campos permanecen en el servidor; nunca forman parte de la respuesta OAuth.
+    moodle_url: str = Field(exclude=True, repr=False)
+    moodle_token: str = Field(exclude=True, repr=False)
+
+
 def get_client() -> MoodleClient:
+    access = get_access_token()
+    if access is not None:
+        if not isinstance(access, MoodleAccessToken):
+            raise ToolError("La conexión no tiene una cuenta Moodle asociada.")
+        return MoodleClient(access.moodle_url, access.moodle_token)
     try:
         saved = read_credentials() if not {"MOODLE_URL", "MOODLE_TOKEN"}.issubset(os.environ) else {}
     except ValueError as error:

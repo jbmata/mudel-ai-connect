@@ -4,6 +4,9 @@ El proyecto incluye un plugin local que reúne el MCP y las skills `moodle-study
 y `setup`. El paquete instalable es `dist/moodle-plugin-0.1.0.zip`; su guía está
 en [`PLUGIN.md`](PLUGIN.md). La clave de tu cuenta queda fuera del paquete.
 
+También incluye un servidor remoto con HTTPS, OAuth y cuentas separadas. Su
+instalación y mantenimiento están en [`DEPLOYMENT.md`](DEPLOYMENT.md).
+
 En este equipo, `moodle@moodle-local` ya está instalado y activado en Codex. Se ha
 probado el arranque desde la copia instalada, la conexión a SIFO, el listado de
 cursos y el cierre del proceso en Windows. Abre una nueva conversación para cargarlo.
@@ -29,8 +32,8 @@ codex plugin add moodle@moodle-local
 ```
 
 La instalación guarda la configuración de la cuenta y las dependencias en el
-perfil local del usuario. Cada persona configura su propia cuenta. Sigue siendo
-una versión local: el despliegue HTTPS autenticado para los navegadores queda pendiente.
+perfil local del usuario. Cada persona configura su propia cuenta. Este paquete
+es local; la versión remota se instala por separado en un servidor.
 
 Este MCP conecta clientes de IA compatibles con Moodle mediante sus servicios web. Está preparado
 para [SIFO de Comillas](https://sifo.comillas.edu/) y consulta con los permisos
@@ -176,15 +179,14 @@ No se ha modificado ni probado la configuración de Claude en este equipo.
 
 ### ChatGPT y Claude en la web
 
-Para conectar la misma cuenta de Moodle desde ambos navegadores, falta desplegar
-el servidor como MCP remoto con una URL HTTPS y autenticación de acceso. Esta
-versión ejecuta únicamente el transporte local `stdio`. La clave de Moodle queda
-en el servidor que ejecuta el conector y no se incluye en la skill.
+`moodle_remote.py` ofrece las mismas herramientas por Streamable HTTP y exige
+OAuth con PKCE. Cada conexión autoriza su propia cuenta Moodle mediante un
+formulario HTTPS; las credenciales se cifran y quedan fuera del repositorio.
+Consulta [`DEPLOYMENT.md`](DEPLOYMENT.md) para instalarlo en un VPS con Caddy.
 
-El despliegue debe proteger los datos de la cuenta: activar un servidor HTTP sin
-autenticación expondría sus cursos a quien tuviera acceso al endpoint. El paquete
-actual no abre puertos ni publica ese endpoint. La configuración depende de la
-aplicación: [ChatGPT](https://developers.openai.com/api/docs/guides/custom-mcp-server)
+El MCP local y el ZIP actual siguen usando `stdio`. La instalación local no
+despliega el servidor remoto. El alta de la conexión depende del cliente y de
+los permisos de la cuenta: [ChatGPT](https://developers.openai.com/api/docs/guides/custom-mcp-server)
 y [Claude](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp).
 
 ## 5. Skill reutilizable
@@ -209,8 +211,8 @@ no establece por sí mismo una conexión con SIFO.
   cuenta. La [guía de Anthropic](https://support.claude.com/en/articles/12512180-use-skills-in-claude)
   explica su instalación. La estructura del ZIP sigue su
   [guía de empaquetado](https://support.claude.com/en/articles/12512198-how-to-create-custom-skills).
-- El plugin `moodle` ya reúne las skills y el MCP local. La publicación en los
-  directorios y la versión remota para ChatGPT/Claude en la web siguen pendientes.
+- El plugin `moodle` reúne las skills y el MCP local. La versión remota se
+  instala con la guía de despliegue; la publicación en directorios sigue pendiente.
 
 Ejemplo: «Usa moodle-study para explicarme el tema 2 de Control Avanzado, leyendo
 primero los materiales de Moodle y citando las fuentes».
@@ -223,9 +225,10 @@ primero los materiales de Moodle y citando las fuentes».
 
 Las pruebas automáticas usan respuestas simuladas de Moodle y un cliente MCP real,
 incluyendo el arranque del servidor como proceso por stdio. No necesitan credenciales.
-Son 26 pruebas, incluyendo el paquete sin secretos, la configuración local y el
-cierre del lanzador. Los manifiestos se han validado con los esquemas oficiales
-de Agent Plugins 1.0.0.
+Las 27 pruebas locales incluyen los paquetes sin secretos, la configuración y el
+cierre del lanzador. Para ejecutar también las 9 pruebas de autenticación remota,
+instala primero `requirements-server.txt`. Los manifiestos locales se han
+validado con los esquemas oficiales de Agent Plugins 1.0.0.
 
 El 29 de octubre de 2026 también se verificó la conexión real a SIFO: autenticación,
 listado de 35 cursos, consulta de secciones de una asignatura, lectura de HTML y de
@@ -248,8 +251,9 @@ que no haya tareas.
 - El token se envía por POST y se oculta en la salida. No se siguen redirecciones
   con credenciales; solo se descargan archivos del endpoint de Moodle en el mismo
   servidor. Un despliegue en una red corporativa puede necesitar adaptar el proxy.
-- Es un MCP local por stdio, acompañado de una skill independiente del proveedor.
-  El despliegue HTTP autenticado y las pruebas desde ChatGPT/Claude quedan pendientes.
+- El MCP local funciona por stdio y el servidor remoto por HTTP autenticado.
+  Las pruebas desde las cuentas reales de ChatGPT/Claude y la publicación en sus
+  directorios requieren completar la conexión en cada cliente.
 
 Implementado con el [SDK oficial de MCP para Python](https://py.sdk.modelcontextprotocol.io/)
 y la [API de servicios externos de Moodle](https://moodledev.io/docs/5.0/apis/subsystems/external).

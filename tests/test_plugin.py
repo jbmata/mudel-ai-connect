@@ -13,10 +13,35 @@ from mcp import Client, StdioServerParameters
 
 import moodle_mcp
 import plugin_runtime as runtime
-from scripts.build_plugin import FILES, ROOT, build
+from scripts.build_plugin import FILES, ROOT, build, build_remote
 
 
 class PluginTests(unittest.TestCase):
+    def test_remote_package_has_only_remote_config_skill_and_logo(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in ("plugin.json", ".claude-plugin/plugin.json", "assets/logo.png", "skills/moodle-study/SKILL.md"):
+                target = root / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes((ROOT / name).read_bytes())
+            (root / ".env").write_text("MOODLE_TOKEN=PRIVATE_CANARY_579", encoding="utf-8")
+            with ZipFile(build_remote("https://mcp.example/mcp", root)) as archive:
+                self.assertEqual(set(archive.namelist()), {
+                    "plugin.json", "mcp.json", ".claude-plugin/plugin.json", ".mcp.json",
+                    "skills/moodle-study/SKILL.md", "assets/logo.png", "README.md"})
+                portable = json.loads(archive.read("mcp.json"))["mcpServers"]["moodle"]
+                self.assertEqual(portable, {"type": "streamable-http", "url": "https://mcp.example/mcp"})
+                self.assertEqual(json.loads(archive.read(".mcp.json"))["mcpServers"]["moodle"]["type"], "http")
+                manifest = json.loads(archive.read("plugin.json"))
+                self.assertFalse(manifest["extensions"]["com.openai"]["requires_local_executor"])
+                self.assertNotIn("onboardingSkill", manifest["extensions"]["com.openai"])
+                for name in archive.namelist():
+                    self.assertNotIn(b"PRIVATE_CANARY_579", archive.read(name))
+            for url in ("http://mcp.example/mcp", "https://secret@mcp.example/mcp",
+                        "https://mcp.example/mcp?token=secret", "https://mcp.example/other"):
+                with self.subTest(url=url), self.assertRaises(ValueError):
+                    build_remote(url, root)
+
     def test_manifests_include_local_mcp_and_matching_identity(self):
         portable = json.loads((ROOT / "plugin.json").read_text(encoding="utf-8"))
         claude = json.loads((ROOT / ".claude-plugin/plugin.json").read_text(encoding="utf-8"))
