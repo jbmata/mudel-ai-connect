@@ -347,7 +347,8 @@ class RequestGuards(BaseHTTPMiddleware):
             "Cache-Control": "no-store", "Referrer-Policy": "same-origin",
             "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY",
             "Content-Security-Policy": "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; "
-                                       "form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+                                       "form-action 'self' https://chatgpt.com https://claude.ai; "
+                                       "frame-ancestors 'none'; base-uri 'none'",
         })
         return response
 

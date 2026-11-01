@@ -132,6 +132,22 @@ class RemoteTests(unittest.TestCase):
         self.assertEqual(self.exchange(client_id, code).status_code, 200)
         self.assertEqual(self.exchange(client_id, code).status_code, 400)
 
+    def test_form_policy_allows_oauth_return_to_each_supported_client(self):
+        for callback in (CALLBACK, "https://claude.ai/api/mcp/auth_callback"):
+            with self.subTest(callback=callback):
+                location, csrf = self.pending(self.register(callback), redirect_uri=callback)
+                with patch.object(moodle.MoodleClient, "call", return_value={"userid": 42}):
+                    response = self.client.post(location, data={"csrf": csrf, "moodle_token": "TestMoodleToken00000001"},
+                                                headers={"Origin": ORIGIN}, follow_redirects=False)
+                self.assertEqual(response.status_code, 303)
+                target = urlsplit(response.headers["location"])
+                self.assertEqual(target._replace(query="").geturl(), callback)
+                policy = self.client.get("/").headers["content-security-policy"]
+                allowed = re.search(r"(?:^|;)\s*form-action\s+([^;]+)", policy).group(1).split()
+                self.assertIn(f"{target.scheme}://{target.netloc}", allowed)
+                self.assertIn("'self'", allowed)
+                self.assertNotIn("*", allowed)
+
     def test_credentials_are_encrypted_and_connections_survive_restart(self):
         import asyncio
         from moodle_remote import MoodleOAuth

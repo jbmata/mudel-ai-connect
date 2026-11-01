@@ -226,7 +226,7 @@ primero los materiales de Moodle y citando las fuentes».
 Las pruebas automáticas usan respuestas simuladas de Moodle y un cliente MCP real,
 incluyendo el arranque del servidor como proceso por stdio. No necesitan credenciales.
 Las 27 pruebas locales incluyen los paquetes sin secretos, la configuración y el
-cierre del lanzador. Para ejecutar también las 9 pruebas de autenticación remota,
+cierre del lanzador. Para ejecutar también las 10 pruebas de autenticación remota,
 instala primero `requirements-server.txt`. Los manifiestos locales se han
 validado con los esquemas oficiales de Agent Plugins 1.0.0.
 
