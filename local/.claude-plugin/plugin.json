@@ -1,0 +1,7 @@
+{
+  "name": "moodle-ai-connect",
+  "version": "0.1.0",
+  "description": "Moodle AI Connect permite consultar tus asignaturas, materiales y fechas de Moodle y estudiar con fuentes.",
+  "mcpServers": "./.mcp.json",
+  "icon": "./assets/logo.png"
+}
