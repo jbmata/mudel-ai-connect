@@ -111,6 +111,9 @@ También necesita permiso para descargar archivos del servicio.
 
 ## Desarrollo y pruebas
 
+La migración experimental del servidor a Rust está en [`rust/`](rust/README.md),
+en la rama `migration/rust`. El instalador y el plugin siguen usando Python.
+
 Desde la carpeta del proyecto:
 
 ```powershell

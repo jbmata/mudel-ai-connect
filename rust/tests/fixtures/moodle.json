@@ -1,0 +1,345 @@
+{
+  "responses": {
+    "core_webservice_get_site_info": {
+      "userid": 8,
+      "fullname": "Alumno de prueba",
+      "sitename": "Campus de prueba",
+      "downloadfiles": 1,
+      "functions": [
+        {
+          "name": "core_webservice_get_site_info"
+        },
+        {
+          "name": "core_enrol_get_users_courses"
+        },
+        {
+          "name": "core_course_get_contents"
+        },
+        {
+          "name": "mod_assign_get_assignments"
+        },
+        {
+          "name": "core_calendar_get_calendar_upcoming_view"
+        },
+        {
+          "name": "core_course_delete_courses"
+        }
+      ]
+    },
+    "core_enrol_get_users_courses": [
+      {
+        "id": 7,
+        "fullname": "<b>Calculo &amp; algebra</b>",
+        "shortname": "MAT",
+        "summary": "<p>Curso de prueba</p><script>oculto()</script><p>https://campus.example/file?token=otro&x=1 secret123</p>"
+      }
+    ],
+    "core_course_get_contents": [
+      {
+        "id": 0,
+        "name": "Tema 0",
+        "summary": "<p>Introduccion</p>",
+        "modules": [
+          {
+            "id": 90,
+            "name": "Apuntes",
+            "modname": "resource",
+            "url": "https://campus.example/moodle/mod/resource/view.php?id=90",
+            "description": "<p>Material &amp; ejemplos</p>",
+            "contents": [
+              {
+                "type": "url",
+                "fileurl": "https://example.test"
+              },
+              {
+                "type": "file",
+                "filename": "apuntes.txt",
+                "filesize": 10,
+                "mimetype": "text/plain",
+                "fileurl": "https://campus.example/moodle/webservice/pluginfile.php/42/content/apuntes.txt?token=old",
+                "content": "<p>Texto inline</p>"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": 1,
+        "name": "Tema 1",
+        "summary": "<p>Introduccion</p>",
+        "modules": [
+          {
+            "id": 91,
+            "name": "Apuntes",
+            "modname": "resource",
+            "url": "https://campus.example/moodle/mod/resource/view.php?id=91",
+            "description": "<p>Material &amp; ejemplos</p>",
+            "contents": [
+              {
+                "type": "url",
+                "fileurl": "https://example.test"
+              },
+              {
+                "type": "file",
+                "filename": "apuntes.txt",
+                "filesize": 10,
+                "mimetype": "text/plain",
+                "fileurl": "https://campus.example/moodle/webservice/pluginfile.php/42/content/apuntes.txt?token=old",
+                "content": "<p>Texto inline</p>"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "name": "Tema 2",
+        "summary": "<p>Introduccion</p>",
+        "modules": [
+          {
+            "id": 92,
+            "name": "Apuntes",
+            "modname": "resource",
+            "url": "https://campus.example/moodle/mod/resource/view.php?id=92",
+            "description": "<p>Material &amp; ejemplos</p>",
+            "contents": [
+              {
+                "type": "url",
+                "fileurl": "https://example.test"
+              },
+              {
+                "type": "file",
+                "filename": "apuntes.txt",
+                "filesize": 10,
+                "mimetype": "text/plain",
+                "fileurl": "https://campus.example/moodle/webservice/pluginfile.php/42/content/apuntes.txt?token=old",
+                "content": "<p>Texto inline</p>"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "name": "Tema 3",
+        "summary": "<p>Introduccion</p>",
+        "modules": [
+          {
+            "id": 93,
+            "name": "Apuntes",
+            "modname": "resource",
+            "url": "https://campus.example/moodle/mod/resource/view.php?id=93",
+            "description": "<p>Material &amp; ejemplos</p>",
+            "contents": [
+              {
+                "type": "url",
+                "fileurl": "https://example.test"
+              },
+              {
+                "type": "file",
+                "filename": "apuntes.txt",
+                "filesize": 10,
+                "mimetype": "text/plain",
+                "fileurl": "https://campus.example/moodle/webservice/pluginfile.php/42/content/apuntes.txt?token=old",
+                "content": "<p>Texto inline</p>"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "mod_assign_get_assignments": {
+      "courses": [
+        {
+          "id": 7,
+          "assignments": [
+            {
+              "id": 15,
+              "name": "<b>Derivadas</b>",
+              "intro": "<p>Derivar</p>",
+              "duedate": 1700000000,
+              "cutoffdate": 0,
+              "allowsubmissionsfromdate": 1690000000,
+              "cmid": 91
+            }
+          ]
+        }
+      ],
+      "warnings": []
+    },
+    "core_calendar_get_calendar_upcoming_view": {
+      "events": [
+        {
+          "id": 21,
+          "name": "<b>Entrega</b>",
+          "description": "<p>Recordatorio</p>",
+          "timestart": 1700000000,
+          "url": "https://campus.example/moodle/calendar/view.php",
+          "eventtype": "due",
+          "course": {
+            "fullname": "Calculo"
+          }
+        }
+      ]
+    }
+  },
+  "expected": {
+    "moodle_status": {
+      "site": "Campus de prueba",
+      "url": "https://campus.example/moodle",
+      "user": "Alumno de prueba",
+      "user_id": 8,
+      "available_functions": [
+        "core_calendar_get_calendar_upcoming_view",
+        "core_course_get_contents",
+        "core_enrol_get_users_courses",
+        "core_webservice_get_site_info",
+        "mod_assign_get_assignments"
+      ],
+      "missing_functions": [],
+      "file_download_enabled": 1
+    },
+    "list_courses": {
+      "courses": [
+        {
+          "id": 7,
+          "name": "Calculo & algebra",
+          "shortname": "MAT",
+          "summary": "Curso de prueba\nhttps://campus.example/file?token=[REDACTED]&x=1 [REDACTED]",
+          "url": "https://campus.example/moodle/course/view.php?id=7"
+        }
+      ]
+    },
+    "get_course_context": {
+      "course_id": 7,
+      "url": "https://campus.example/moodle/course/view.php?id=7",
+      "total_sections": 4,
+      "sections": [
+        {
+          "id": 0,
+          "name": "Tema 0",
+          "summary": "Introduccion",
+          "modules": [
+            {
+              "id": 90,
+              "name": "Apuntes",
+              "type": "resource",
+              "url": "https://campus.example/moodle/mod/resource/view.php?id=90",
+              "description": "Material & ejemplos",
+              "contents": [
+                {
+                  "type": "url",
+                  "fileurl": "https://example.test",
+                  "file_index": 0,
+                  "inline_text": ""
+                },
+                {
+                  "type": "file",
+                  "filename": "apuntes.txt",
+                  "fileurl": "https://campus.example/moodle/webservice/pluginfile.php/42/content/apuntes.txt?token=[REDACTED]",
+                  "filesize": 10,
+                  "mimetype": "text/plain",
+                  "file_index": 1,
+                  "inline_text": "Texto inline"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": 1,
+          "name": "Tema 1",
+          "summary": "Introduccion",
+          "modules": [
+            {
+              "id": 91,
+              "name": "Apuntes",
+              "type": "resource",
+              "url": "https://campus.example/moodle/mod/resource/view.php?id=91",
+              "description": "Material & ejemplos",
+              "contents": [
+                {
+                  "type": "url",
+                  "fileurl": "https://example.test",
+                  "file_index": 0,
+                  "inline_text": ""
+                },
+                {
+                  "type": "file",
+                  "filename": "apuntes.txt",
+                  "fileurl": "https://campus.example/moodle/webservice/pluginfile.php/42/content/apuntes.txt?token=[REDACTED]",
+                  "filesize": 10,
+                  "mimetype": "text/plain",
+                  "file_index": 1,
+                  "inline_text": "Texto inline"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "name": "Tema 2",
+          "summary": "Introduccion",
+          "modules": [
+            {
+              "id": 92,
+              "name": "Apuntes",
+              "type": "resource",
+              "url": "https://campus.example/moodle/mod/resource/view.php?id=92",
+              "description": "Material & ejemplos",
+              "contents": [
+                {
+                  "type": "url",
+                  "fileurl": "https://example.test",
+                  "file_index": 0,
+                  "inline_text": ""
+                },
+                {
+                  "type": "file",
+                  "filename": "apuntes.txt",
+                  "fileurl": "https://campus.example/moodle/webservice/pluginfile.php/42/content/apuntes.txt?token=[REDACTED]",
+                  "filesize": 10,
+                  "mimetype": "text/plain",
+                  "file_index": 1,
+                  "inline_text": "Texto inline"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "inline_text_limit": 4000,
+      "next_section_start": 3
+    },
+    "list_assignments": {
+      "assignments": [
+        {
+          "id": 15,
+          "name": "Derivadas",
+          "description": "Derivar",
+          "due_at_utc": "2023-11-14T22:13:20+00:00",
+          "cutoff_at_utc": null,
+          "opens_at_utc": "2023-07-22T04:26:40+00:00",
+          "url": "https://campus.example/moodle/mod/assign/view.php?id=91"
+        }
+      ],
+      "warnings": [],
+      "note": "Plazos devueltos por Moodle; no se ha consultado el estado de entrega. Verifica posibles prórrogas personales en SIFO."
+    },
+    "get_upcoming_events": {
+      "events": [
+        {
+          "id": 21,
+          "name": "Entrega",
+          "description": "Recordatorio",
+          "starts_at_utc": "2023-11-14T22:13:20+00:00",
+          "url": "https://campus.example/moodle/calendar/view.php",
+          "course": "Calculo",
+          "type": "due"
+        }
+      ],
+      "note": "El horizonte y el número de eventos dependen de los ajustes de Moodle; no es todo el calendario."
+    }
+  }
+}
