@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
   "mcpServers": {
-    "moodle-ai-connect": {
+    "mudel-ai-connect": {
       "type": "stdio",
       "command": "python",
       "args": ["${PLUGIN_ROOT}/plugin_runtime.py", "run"]

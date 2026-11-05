@@ -2,7 +2,12 @@
 .env
 .env.*
 !.env.example
-credentials.json
+credentials*.json
+permissions.json
+*.mudel-ai-connect-backup
+*.moodle-ai-connect-backup
+.codex/
+.aws/
 *.key
 *.pem
 __pycache__/
@@ -10,5 +15,3 @@ __pycache__/
 dist/
 tmp/
 *.log
-*.sqlite3*
-/server-data/

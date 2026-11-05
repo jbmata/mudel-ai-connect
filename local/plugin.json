@@ -1,15 +1,15 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
-  "name": "moodle-ai-connect",
+  "name": "mudel-ai-connect",
   "version": "0.1.0",
-  "description": "Moodle AI Connect permite consultar tus asignaturas, materiales y fechas de Moodle y estudiar con fuentes.",
+  "description": "Mudel AI Connect permite consultar tus asignaturas, materiales y fechas de Moodle y estudiar con fuentes.",
   "keywords": ["moodle", "estudio", "educacion", "mcp"],
   "extensions": {
     "com.openai": {
       "requires_local_executor": true,
       "onboardingSkill": "./skills/setup/SKILL.md",
       "interface": {
-        "displayName": "Moodle AI Connect",
+        "displayName": "Mudel AI Connect",
         "shortDescription": "Tus asignaturas y apuntes en el contexto de tu IA",
         "composerIcon": "./assets/logo.png",
         "logo": "./assets/logo.png"

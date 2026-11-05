@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "moodle-ai-connect": {
+    "mudel-ai-connect": {
       "type": "stdio",
       "command": "python",
       "args": ["${CLAUDE_PLUGIN_ROOT}/plugin_runtime.py", "run"]

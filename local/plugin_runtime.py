@@ -16,6 +16,12 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parent
+PERMISSIONS = {
+    "courses": "Asignaturas",
+    "materials": "Materiales y archivos",
+    "assignments": "Tareas",
+    "calendar": "Calendario",
+}
 
 
 def data_dir() -> Path:
@@ -23,7 +29,7 @@ def data_dir() -> Path:
         parent = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
     else:
         parent = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    return parent / "moodle-ai-connect"
+    return parent / "mudel-ai-connect"
 
 
 def credentials_path() -> Path:
@@ -32,6 +38,26 @@ def credentials_path() -> Path:
 
 def protected_credentials_path() -> Path:
     return data_dir() / "credentials.dpapi.json"
+
+
+def _validate_permissions(values: dict[str, bool]) -> dict[str, bool]:
+    if (not isinstance(values, dict) or set(values) != set(PERMISSIONS)
+            or any(type(value) is not bool for value in values.values())):
+        raise ValueError("Los permisos deben indicar sí o no para cada tipo de consulta.")
+    return values
+
+
+def read_permissions() -> dict[str, bool]:
+    try:
+        return _validate_permissions(json.loads((data_dir() / "permissions.json").read_text(encoding="utf-8")))
+    except FileNotFoundError:
+        return dict.fromkeys(PERMISSIONS, True)
+    except (OSError, ValueError):
+        raise ValueError("No se pudieron leer los permisos. Vuelve a guardarlos desde el instalador.") from None
+
+
+def save_permissions(values: dict[str, bool]) -> None:
+    _write_json(data_dir() / "permissions.json", _validate_permissions(values))
 
 
 def _dpapi(data: bytes, protect: bool) -> bytes:
@@ -52,7 +78,7 @@ def _dpapi(data: bytes, protect: bool) -> bytes:
     buffer = ctypes.create_string_buffer(data, len(data))
     source = Blob(len(data), ctypes.cast(buffer, ctypes.POINTER(ctypes.c_char)))
     result = Blob()
-    if not function(ctypes.byref(source), "moodle-ai-connect" if protect else None, None, None, None, 0,
+    if not function(ctypes.byref(source), "mudel-ai-connect" if protect else None, None, None, None, 0,
                     ctypes.byref(result)):
         raise OSError("DPAPI rechazó la operación.")
     try:
@@ -61,17 +87,25 @@ def _dpapi(data: bytes, protect: bool) -> bytes:
         kernel32.LocalFree(result.pbData)
 
 
-def read_credentials() -> dict[str, str]:
+def read_protected_credentials(path: Path) -> dict[str, str]:
+    """Lee una cuenta cifrada con DPAPI, también la de una instalación con el nombre anterior."""
+    try:
+        values = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(values, dict) or any(not isinstance(values.get(key), str)
+                                              for key in ("MOODLE_URL", "MOODLE_TOKEN_DPAPI")):
+            raise ValueError
+        token = _dpapi(base64.b64decode(values["MOODLE_TOKEN_DPAPI"], validate=True), False).decode("ascii")
+        return {"MOODLE_URL": values["MOODLE_URL"], "MOODLE_TOKEN": token}
+    except (OSError, ValueError, KeyError, AttributeError, TypeError):
+        raise ValueError("No se pudo leer la clave guardada. Vuelve a configurar la cuenta con el instalador.") from None
+
+
+def read_credentials(*, protect: bool | None = None) -> dict[str, str]:
     protected = protected_credentials_path()
-    if protected.exists():
-        try:
-            values = json.loads(protected.read_text(encoding="utf-8"))
-            token = _dpapi(base64.b64decode(values["MOODLE_TOKEN_DPAPI"]), False).decode("ascii")
-            if not isinstance(values["MOODLE_URL"], str):
-                raise ValueError
-            return {"MOODLE_URL": values["MOODLE_URL"], "MOODLE_TOKEN": token}
-        except (OSError, ValueError, KeyError, AttributeError):
-            raise ValueError("No se pudo leer la clave guardada. Vuelve a configurar la cuenta con el instalador.") from None
+    if protect is not False and protected.exists():
+        return read_protected_credentials(protected)
+    if protect is True:
+        return {}
     path = credentials_path()
     if not path.exists():
         return {}
@@ -101,6 +135,10 @@ def save_credentials(url: str, token: str, *, protect: bool = False) -> None:
     else:
         target = credentials_path()
         content = {"MOODLE_URL": url, "MOODLE_TOKEN": token}
+    _write_json(target, content)
+
+
+def _write_json(target: Path, content: dict) -> None:
     target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     temporary = None
     try:
@@ -130,7 +168,7 @@ def setup(source_env: Path | None, configure: bool) -> None:
         venv.EnvBuilder(with_pip=True).create(environment)
     subprocess.run([str(python), "-m", "pip", "install", "--disable-pip-version-check",
                     "-r", str(ROOT / "requirements.txt")], stdout=sys.stderr, check=True)
-    (environment / ".moodle-ai-connect-ready").touch()
+    (environment / ".mudel-ai-connect-ready").touch()
     if source_env is not None:
         # Capturar en memoria: la clave nunca se imprime en el terminal de instalación.
         result = subprocess.run([
@@ -153,7 +191,7 @@ def setup(source_env: Path | None, configure: bool) -> None:
 
 def run(check: bool = False) -> int:
     python = runtime_python()
-    if not python.is_file() or not (python.parent.parent / ".moodle-ai-connect-ready").is_file():
+    if not python.is_file() or not (python.parent.parent / ".mudel-ai-connect-ready").is_file():
         raise ValueError("Falta preparar el plugin. Ejecuta: python plugin_runtime.py setup")
     os.environ.setdefault("PYTHONIOENCODING", "utf-8")
     # En el paquete el servidor está junto al lanzador; en el repositorio, en ../shared.
@@ -164,11 +202,13 @@ def run(check: bool = False) -> int:
     # Esperar al hijo evita que el lanzador termine antes que el MCP en Windows.
     # El servidor lee la cuenta guardada importando este módulo, esté o no a su lado.
     paths = os.pathsep.join(filter(None, [str(ROOT), os.environ.get("PYTHONPATH")]))
-    return subprocess.call(args, env={**os.environ, "PYTHONPATH": paths})
+    environment = {"MOODLE_URL": "", "MOODLE_TOKEN": "", **read_credentials(protect=False),
+                   **os.environ, "PYTHONPATH": paths}
+    return subprocess.call(args, env=environment)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Preparar o ejecutar Moodle AI Connect.")
+    parser = argparse.ArgumentParser(description="Preparar o ejecutar Mudel AI Connect.")
     commands = parser.add_subparsers(dest="command", required=True)
     install = commands.add_parser("setup", help="Instalar dependencias y configurar la cuenta local.")
     install.add_argument("--from-env", type=Path, help="Importar MOODLE_URL y MOODLE_TOKEN de un archivo local.")

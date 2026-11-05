@@ -1,15 +1,15 @@
 ---
 name: setup
-description: Instala y configura la conexión local de Moodle AI Connect, conecta la cuenta del usuario o diagnostica fallos del MCP. Úsala para configurar o reparar el acceso al campus.
+description: Instala y configura la conexión local de Mudel AI Connect, conecta la cuenta del usuario o diagnostica fallos del MCP. Úsala para configurar o reparar el acceso al campus.
 ---
 
-# Configurar Moodle AI Connect
+# Configurar Mudel AI Connect
 
-El plugin incluye un MCP local y la skill `moodle-ai-connect-study`. Necesita Python 3.11+
+El plugin incluye un MCP local y la skill `mudel-ai-connect-study`. Necesita Python 3.11+
 y un token de servicios web autorizado de la cuenta del usuario.
 
 Esta skill se ocupa de la conexión. Las consultas del campus, el estudio y la
-organización se atienden con `moodle-ai-connect-study` usando esa misma conexión.
+organización se atienden con `mudel-ai-connect-study` usando esa misma conexión.
 
 ## Comprobar antes de cambiar
 
@@ -49,6 +49,9 @@ ausentes y los errores de acceso sin mostrar credenciales. Tras configurar la
 cuenta, pide reiniciar la conexión MCP en el cliente si aún conserva un fallo de
 arranque anterior y ofrece probar el listado de asignaturas.
 
-Esta versión utiliza `stdio`. Si el cliente solo permite conectores remotos,
-explica que hace falta un despliegue HTTPS autenticado antes de poder utilizar
-las herramientas; instalar las instrucciones por sí solo no conecta Moodle.
+Esta versión utiliza `stdio` y requiere un cliente con ejecución MCP local.
+Instalar las instrucciones por sí solo no conecta Moodle.
+
+Si una consulta está desactivada por los permisos locales, explica ese límite.
+El usuario puede revisar su selección en el botón **Permisos** del instalador.
+No reinstales, cambies claves ni intentes habilitar consultas para sortear el bloqueo.

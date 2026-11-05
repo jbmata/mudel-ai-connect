@@ -1,9 +1,9 @@
 ---
-name: moodle-study
-description: Consulta asignaturas y materiales de Moodle, ayuda a estudiar con sus fuentes y organiza tareas y planes de estudio. Úsala para trabajar con el contexto del campus, incluido SIFO de Comillas, mediante un MCP conectado.
+name: mudel-ai-connect-study
+description: Consulta asignaturas y materiales de Moodle con Mudel AI Connect, ayuda a estudiar con sus fuentes y organiza tareas y planes de estudio. Úsala para trabajar con el contexto del campus, incluido SIFO de Comillas, mediante un MCP conectado.
 ---
 
-# Consultar, estudiar y organizar con Moodle
+# Consultar, estudiar y organizar con Mudel AI Connect
 
 Trabaja con las fuentes de las asignaturas del usuario y cita los materiales que
 hayas consultado. La conexión a Moodle la proporciona un servidor MCP; esta skill

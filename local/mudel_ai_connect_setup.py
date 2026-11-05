@@ -1,4 +1,4 @@
-"""Ventana de Moodle AI Connect: conecta Moodle con las aplicaciones de IA de este equipo."""
+"""Ventana de Mudel AI Connect: conecta Moodle con las aplicaciones de IA de este equipo."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, ttk
 
-import moodle_ai_connect_installer as installer
+import mudel_ai_connect_installer as installer
 
 # Paleta del logo: trazo casi negro, fondo blanco y un único acento rosa.
 INK, PINK, PAPER, SOFT, MUTED, OFF = "#191A1E", "#F9017C", "#FFFFFF", "#F4F4F5", "#6B6B73", "#B8B8BE"
@@ -39,7 +39,7 @@ class SetupWindow:
         self.badges: dict[str, tk.Label] = {}
         self.notes: dict[str, tk.Label] = {}
         self.steps: list[list[str]] = []
-        root.title("Moodle AI Connect")
+        root.title("Mudel AI Connect")
         root.configure(background=PAPER)
         root.resizable(False, False)
         root.report_callback_exception = lambda *_args: installer.log_error()
@@ -60,7 +60,7 @@ class SetupWindow:
             tk.Label(header, image=self.logo, background=PAPER).pack(side="left", padx=(0, 18))
         titles = tk.Frame(header, background=PAPER)
         titles.pack(side="left", anchor="center")
-        tk.Label(titles, text="Moodle AI Connect", font=(FONT, 22, "bold"), foreground=INK,
+        tk.Label(titles, text="Mudel AI Connect", font=(FONT, 22, "bold"), foreground=INK,
                  background=PAPER).pack(anchor="w")
         tk.Label(titles, text="Conecta tus asignaturas con tu IA.",
                  font=(FONT, 11), foreground=MUTED, background=PAPER, justify="left").pack(anchor="w", pady=(4, 0))
@@ -128,6 +128,12 @@ class SetupWindow:
             self.remove.configure(foreground=PINK), outline.configure(background=PINK)))
         self.remove.bind("<Leave>", lambda _e: (self.remove.configure(foreground=INK), self.paint_remove()))
 
+        self.permissions_button = tk.Button(
+            actions, text="Permisos", command=self.edit_permissions, font=(FONT, 10, "bold"),
+            foreground=PINK, background=PAPER, activeforeground=INK, activebackground=PAPER,
+            relief="flat", padx=10, pady=9, cursor="hand2")
+        self.permissions_button.pack(side="left")
+
         style = ttk.Style(root)
         style.theme_use("clam")
         style.configure("Moodle.Horizontal.TProgressbar", troughcolor=SOFT, background=PINK,
@@ -144,6 +150,19 @@ class SetupWindow:
         self.log.tag_configure("ok", font=(FONT, 10, "bold"))
         self.log.tag_configure("err", foreground=PINK, font=(FONT, 10, "bold"))
         self.log.tag_configure("muted", foreground=MUTED)
+
+        footer = tk.Frame(page, background=PAPER)
+        footer.grid(row=12, column=0, sticky="we", pady=(6, 0))
+        tk.Label(footer, text=f"v{installer.VERSION}  ·  No oficial: sin relación con Moodle ni con tu universidad",
+                 font=(FONT, 8), foreground=MUTED, background=PAPER).pack(side="left")
+        diagnose = tk.Label(footer, text="Copiar diagnóstico", font=(FONT, 8, "bold"), foreground=PINK,
+                            background=PAPER, cursor="hand2")
+        diagnose.pack(side="right")
+        diagnose.bind("<Button-1>", lambda _e: self.copy_diagnostics())
+        self.update_link = tk.Label(footer, font=(FONT, 8, "bold"), foreground=PINK, background=PAPER,
+                                    cursor="hand2")
+        self.update_url = ""
+        self.update_link.bind("<Button-1>", lambda _e: self.update_url and webbrowser.open(self.update_url))
 
         self.url.trace_add("write", lambda *_args: self.validate())
         self.token.trace_add("write", lambda *_args: self.validate())
@@ -287,6 +306,57 @@ class SetupWindow:
     def paint_remove(self) -> None:
         self.outline.configure(background=OFF if str(self.remove["state"]) == "disabled" else INK)
 
+
+    def edit_permissions(self) -> None:
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Consultas permitidas")
+        dialog.transient(self.root)
+        dialog.resizable(False, False)
+        dialog.configure(background=PAPER)
+        panel = tk.Frame(dialog, background=PAPER, padx=24, pady=20)
+        panel.pack()
+        notice = "Elige qué puede consultar la IA en este equipo."
+        try:
+            allowed = installer.read_permissions()
+        except ValueError as error:
+            allowed = dict.fromkeys(installer.PERMISSIONS, False)
+            notice = str(error)
+        tk.Label(panel, text=notice, wraplength=360, justify="left", font=(FONT, 10),
+                 foreground=INK, background=PAPER).pack(anchor="w", pady=(0, 10))
+        variables = {}
+        for name, label in installer.PERMISSIONS.items():
+            variable = tk.BooleanVar(master=dialog, value=allowed[name])
+            variables[name] = variable
+            tk.Checkbutton(panel, text=label, variable=variable, font=(FONT, 11),
+                           foreground=INK, background=PAPER, activebackground=PAPER,
+                           activeforeground=PINK, selectcolor=PAPER, anchor="w").pack(anchor="w")
+        tk.Label(panel, text=(
+            "El estado de conexión sigue disponible para diagnóstico.\n"
+            "Los permisos se comparten entre los clientes de IA de este usuario.\n"
+            "Instala o actualiza el programa con este instalador para aplicar este control."),
+            wraplength=360, justify="left", font=(FONT, 9), foreground=MUTED,
+            background=PAPER).pack(anchor="w", pady=(12, 14))
+
+        def save() -> None:
+            try:
+                installer.save_permissions({name: variable.get() for name, variable in variables.items()})
+            except (OSError, ValueError):
+                messagebox.showerror("Permisos", "No se pudieron guardar los permisos. Vuelve a intentarlo.", parent=dialog)
+                return
+            dialog.destroy()
+            if installer.server_up_to_date():
+                self.step("Permisos guardados. Se aplican a las próximas consultas.", "done")
+            else:
+                self.step("Permisos guardados. Actualiza el programa para aplicarlos.", "note")
+
+        actions = tk.Frame(panel, background=PAPER)
+        actions.pack(fill="x")
+        tk.Button(actions, text="Guardar", command=save, font=(FONT, 10, "bold"), foreground=PAPER,
+                  background=INK, activebackground=PINK, activeforeground=PAPER, padx=18, pady=6).pack(side="left")
+        tk.Button(actions, text="Cancelar", command=dialog.destroy, font=(FONT, 10),
+                  foreground=INK, background=PAPER, padx=14, pady=6).pack(side="left", padx=(8, 0))
+        dialog.grab_set()
+
     def clear_steps(self) -> None:
         self.steps = []
         self.log.grid_remove()
@@ -337,6 +407,7 @@ class SetupWindow:
 
     def busy(self, working: bool, label: str = "") -> None:
         self.working = working
+        self.permissions_button.configure(state="disabled" if working else "normal")
         if working:
             self.connect.configure(state="disabled", background=OFF, text=label)
             self.remove.configure(state="disabled")
@@ -368,7 +439,7 @@ class SetupWindow:
         if desktop:
             reasons.append("Claude Desktop puede sobrescribir la configuración si sigue abierto.")
         if servers:
-            reasons.append("Una app está usando Moodle AI Connect. Perderá esa conexión hasta que la reinicies.")
+            reasons.append("Una app está usando Mudel AI Connect. Perderá esa conexión hasta que la reinicies.")
         if not self.ask("Hay aplicaciones abiertas", "\n\n".join(reasons)
                         + "\n\nGuarda tu trabajo. ¿Continuar?"):
             raise installer.InstallError("Cancelado. No se ha cambiado nada.")
@@ -422,14 +493,12 @@ class SetupWindow:
                 self.events.put(("note", "Consultas sin permiso: " + ", ".join(missing)))
             self.clear_way(*installer.needs_closing_for_install(selected))
             notes = installer.install(url, token, selected, self.report)
-            self.report("Comprobando instalación")
-            installer.verify_installed()
             return notes
 
         self.run_in_background(work, "Instalando…")
 
     def start_uninstall(self) -> None:
-        if not messagebox.askyesno("Desinstalar", "¿Desinstalar Moodle AI Connect y borrar el token guardado?"):
+        if not messagebox.askyesno("Desinstalar", "¿Desinstalar Mudel AI Connect y borrar el token guardado?"):
             return
         self.mode = "uninstall"
 
@@ -439,7 +508,31 @@ class SetupWindow:
 
         self.run_in_background(work, "Desinstalando…")
 
+    def copy_diagnostics(self) -> None:
+        """Copia el estado para pedir ayuda. Lleva rutas del equipo, nunca el token."""
+        try:
+            text = installer.diagnostics()
+        except Exception:
+            installer.log_error()
+            text = f"Mudel AI Connect {installer.VERSION}: no se pudo generar el diagnóstico."
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        self.steps = [["done", "Diagnóstico copiado. Pégalo al pedir ayuda: incluye estados y rutas "
+                               "de tu equipo, nunca tu token."]]
+        self.render_steps()
+
+    def check_updates(self) -> None:
+        """Busca una versión nueva sin bloquear la ventana; sin red no muestra nada."""
+        threading.Thread(target=lambda: self.events.put(("update", installer.newer_release())),
+                         daemon=True).start()
+
     def handle(self, kind: str, payload) -> None:
+        if kind == "update":
+            if payload:
+                self.update_url = payload["url"]
+                self.update_link.configure(text=f"Versión {payload['version']} disponible  →")
+                self.update_link.pack(side="right", padx=(0, 14))
+            return
         if kind == "snapshot":
             if not self.working:
                 self.apply(payload)
@@ -492,6 +585,7 @@ def main() -> None:
     root = tk.Tk()
     window = SetupWindow(root)
     window.start_monitor()
+    window.check_updates()
     root.mainloop()
 
 
