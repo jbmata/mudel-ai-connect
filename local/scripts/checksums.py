@@ -20,7 +20,8 @@ def write_checksums(dist: Path = ROOT / "dist") -> Path:
             raise SystemExit(f"Falta {path}. Genera antes los paquetes.")
         lines.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {name}")
     output = dist / "SHA256SUMS.txt"
-    output.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    # Saltos de línea LF: con CRLF, `sha256sum -c` no encuentra los archivos.
+    output.write_bytes(("\n".join(lines) + "\n").encode("utf-8"))
     return output
 
 
