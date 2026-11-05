@@ -32,7 +32,7 @@ SERVER_NAME = "mudel-ai-connect"
 # Nombre anterior de la app («Moodle AI Connect»): sus instalaciones se migran al instalar.
 LEGACY_NAME = "moodle-ai-connect"
 VERSION = "0.1.0"  # Debe coincidir con local/plugin.json y la etiqueta de la release (vX.Y.Z).
-RELEASES = "https://api.github.com/repos/jbmata/mcp-moodle/releases?per_page=20"
+RELEASES = "https://api.github.com/repos/jbmata/mudel-ai-connect/releases?per_page=20"
 SERVER_DIR = "mudel-ai-connect-server"
 SERVER_EXE = "mudel-ai-connect-server.exe"
 MANIFEST = "mudel-ai-connect-install.json"

@@ -172,10 +172,10 @@ class InstallerTests(unittest.TestCase):
 
     def test_newer_release_is_found_including_betas_and_ignoring_drafts(self):
         releases = [
-            {"tag_name": "v0.3.0", "html_url": "https://github.com/jbmata/mcp-moodle/releases/tag/v0.3.0", "draft": True},
-            {"tag_name": "v0.2.0-beta", "html_url": "https://github.com/jbmata/mcp-moodle/releases/tag/v0.2.0-beta",
+            {"tag_name": "v0.3.0", "html_url": "https://github.com/jbmata/mudel-ai-connect/releases/tag/v0.3.0", "draft": True},
+            {"tag_name": "v0.2.0-beta", "html_url": "https://github.com/jbmata/mudel-ai-connect/releases/tag/v0.2.0-beta",
              "prerelease": True},
-            {"tag_name": "v0.1.0", "html_url": "https://github.com/jbmata/mcp-moodle/releases/tag/v0.1.0"},
+            {"tag_name": "v0.1.0", "html_url": "https://github.com/jbmata/mudel-ai-connect/releases/tag/v0.1.0"},
             {"tag_name": "v9.9.9", "html_url": "https://malicioso.example/v9"},
         ]
         with self.fake_releases(releases), patch.object(installer, "VERSION", "0.1.0"):

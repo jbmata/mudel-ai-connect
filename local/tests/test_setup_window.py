@@ -165,7 +165,7 @@ class SetupWindowTests(unittest.TestCase):
         self.assertIn("nunca tu token", window.log.get("1.0", "end"))
         window.handle("update", None)
         self.assertEqual(window.update_link.winfo_manager(), "")
-        window.handle("update", {"version": "v0.2.0", "url": "https://github.com/jbmata/mcp-moodle/releases/tag/v0.2.0"})
+        window.handle("update", {"version": "v0.2.0", "url": "https://github.com/jbmata/mudel-ai-connect/releases/tag/v0.2.0"})
         self.assertEqual(window.update_link.winfo_manager(), "pack")
         self.assertIn("v0.2.0", window.update_link.cget("text"))
 

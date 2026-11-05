@@ -1,7 +1,7 @@
 # Publicar una versión
 
 El repositorio contiene el código fuente. Los binarios se distribuyen como adjuntos
-de [GitHub Releases](https://github.com/jbmata/mcp-moodle/releases). El instalador avisa
+de [GitHub Releases](https://github.com/jbmata/mudel-ai-connect/releases). El instalador avisa
 de versiones nuevas leyendo esas releases, así que cada versión tiene que publicarse ahí.
 
 ## Preparar la versión
