@@ -21,6 +21,6 @@ def square_logo() -> Image.Image:
 
 if __name__ == "__main__":
     logo = square_logo()
-    logo.resize((132, 132), Image.LANCZOS).save(LOCAL / "assets" / "logo-setup.png", optimize=True)
+    logo.resize((104, 104), Image.LANCZOS).save(LOCAL / "assets" / "logo-setup.png", optimize=True)
     logo.save(LOCAL / "assets" / "logo.ico", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (256, 256)])
     print("assets/logo-setup.png, assets/logo.ico")

@@ -83,6 +83,23 @@ class SetupWindowTests(unittest.TestCase):
         self.assertIn("Marca al menos", window.log.get("1.0", "end"))
         self.assertFalse(window.working)
 
+    def test_window_fits_small_laptop_screens_with_results_and_help_open(self):
+        for screen in (768,):  # p. ej. 1366 × 768; aquí con el escalado del equipo, más exigente
+            with self.subTest(screen=screen), patch.object(self.root, "winfo_screenheight", return_value=screen):
+                window = mudel_ai_connect_setup.SetupWindow(self.root)
+                self.root.deiconify()
+                window.token_help_toggle.invoke()
+                for number in range(9):
+                    window.step(f"Paso {number}")
+                self.root.update()
+                bottom = self.root.winfo_y() + self.root.winfo_reqheight() + mudel_ai_connect_setup.TITLE_BAR
+                self.assertLessEqual(bottom, screen - mudel_ai_connect_setup.TASKBAR)
+                self.assertGreaterEqual(int(window.log.cget("height")), 2)
+                self.assertIn("Paso 8", window.log.get("1.0", "end"))
+                self.assertEqual(window.token_help.winfo_manager(), "")  # la ayuda se plegó para hacer sitio
+                for child in self.root.winfo_children():
+                    child.destroy()
+
     def test_window_stays_above_the_taskbar_when_results_appear(self):
         window = mudel_ai_connect_setup.SetupWindow(self.root)
         self.root.deiconify()

@@ -18,6 +18,7 @@ STATES = {"ok": ("✓ Conectado", INK), "stale": ("Actualizar", PINK), "missing"
 MARKS = {"run": ("…  ", ""), "ok": ("✓  ", ""), "err": ("✗  ", "err"), "note": ("    ", "muted"), "done": ("✓  ", "ok")}
 REFRESH_SECONDS = 3
 TASKBAR, TITLE_BAR = 70, 45
+LOG_LINES = 6  # Altura del registro; en pantallas bajas se reduce hasta 2 y se desplaza con la rueda.
 
 
 def asset(name: str) -> Path:
@@ -142,7 +143,7 @@ class SetupWindow:
         self.progress.grid(row=10, column=0, sticky="we", pady=(12, 0))
         self.progress.grid_remove()
 
-        self.log = tk.Text(page, height=6, width=58, state="disabled", wrap="word", relief="flat",
+        self.log = tk.Text(page, height=LOG_LINES, width=58, state="disabled", wrap="word", relief="flat",
                            background=SOFT, foreground=INK, font=(FONT, 10), padx=12, pady=10,
                            highlightthickness=0, cursor="arrow")
         self.log.grid(row=11, column=0, sticky="we", pady=(10, 0))
@@ -167,7 +168,9 @@ class SetupWindow:
         self.url.trace_add("write", lambda *_args: self.validate())
         self.token.trace_add("write", lambda *_args: self.validate())
         self.refresh()
-        self.root.after(100, self.poll)
+        self.poll_id = self.root.after(100, self.poll)
+        # Al destruirse la ventana (también en los tests) no debe quedar un temporizador pendiente.
+        root.bind("<Destroy>", lambda event: event.widget is root and self.root.after_cancel(self.poll_id), add="+")
 
     @staticmethod
     def field(page: tk.Frame, row: int, text: str) -> tk.Label:
@@ -362,9 +365,25 @@ class SetupWindow:
         self.log.grid_remove()
 
     def keep_on_screen(self) -> None:
-        """Al crecer con los resultados, la ventana no debe quedar bajo la barra de tareas."""
-        self.root.update_idletasks()
+        """Al crecer con los resultados, la ventana no debe quedar bajo la barra de tareas.
+
+        En portátiles de 768 px de alto no cabe entera: se encoge el registro y, si hace falta,
+        se pliega la ayuda del token, que ya no se necesita mientras se ven resultados.
+        """
         limit = self.root.winfo_screenheight() - TASKBAR
+
+        def too_tall() -> bool:
+            self.root.update_idletasks()
+            return self.root.winfo_reqheight() + TITLE_BAR > limit
+
+        lines = LOG_LINES
+        self.log.configure(height=lines)
+        while too_tall() and lines > 2:
+            lines -= 1
+            self.log.configure(height=lines)
+        if too_tall() and self.token_help.winfo_manager() and self.log.winfo_manager():
+            self.toggle_token_help()  # vuelve a llamar a keep_on_screen, ya con la ayuda plegada
+            return
         height = self.root.winfo_reqheight() + TITLE_BAR
         if self.root.winfo_y() + height > limit:
             self.root.geometry(f"+{self.root.winfo_x()}+{max(0, limit - height)}")
@@ -575,7 +594,7 @@ class SetupWindow:
                 self.handle(kind, payload)
         except queue.Empty:
             pass
-        self.root.after(100, self.poll)
+        self.poll_id = self.root.after(100, self.poll)
 
 
 def main() -> None:
