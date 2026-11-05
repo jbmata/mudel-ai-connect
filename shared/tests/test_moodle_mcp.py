@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
 from io import BytesIO
 from pathlib import Path
@@ -18,6 +19,7 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "shared"))
 
 import moodle_mcp as server  # noqa: E402
+import plugin_runtime as runtime  # noqa: E402  (moodle_mcp añade local/ a la ruta)
 
 BASE = "https://campus.example/moodle"
 TOKEN = "secret123"
@@ -166,6 +168,127 @@ class MoodleTests(unittest.TestCase):
             server.read_course_file(7, 999)
 
 
+class DownloadTests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.downloads = Path(directory.name) / "Descargas"
+        self.downloads.mkdir()
+        for patcher in (patch.object(runtime, "downloads_dir", return_value=self.downloads),
+                        patch.object(runtime, "data_dir", return_value=Path(directory.name) / "estado"),
+                        patch.object(server, "require_permission")):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.files_requested = 0
+
+    def download(self, name="Tema 1.pdf", body=b"%PDF-1.7 apuntes", content_type="application/pdf",
+                 course="Control <b>Avanzado</b>", course_id=7, filesize=None):
+        def handler(request):
+            if request.url.path.endswith("/rest/server.php"):
+                function = parse_qs(request.content.decode())["wsfunction"][0]
+                return httpx.Response(200, json={
+                    "core_webservice_get_site_info": {"userid": 3},
+                    "core_enrol_get_users_courses": [{"id": 7, "fullname": course}],
+                    "core_course_get_contents": [{"id": 1, "name": "Tema", "modules": [{
+                        "id": 90, "url": BASE + "/mod/resource/view.php?id=90", "contents": [{
+                            "type": "file", "filename": name, "filesize": filesize or len(body),
+                            "fileurl": FILE_URL + "?forcedownload=1&token=old"}]}]}],
+                }[function])
+            self.files_requested += 1
+            self.assertEqual(parse_qs(request.content.decode()), {"token": [TOKEN]})
+            self.assertNotIn("token", request.url.query.decode())
+            return httpx.Response(200, content=body, headers={"content-type": content_type})
+
+        client = server.MoodleClient(BASE, TOKEN, transport=httpx.MockTransport(handler))
+        with patch.object(server, "get_client", return_value=client):
+            return server.download_course_file(course_id, 90)
+
+    def saved(self):
+        return sorted(str(path.relative_to(self.downloads)) for path in self.downloads.rglob("*") if path.is_file())
+
+    def test_saves_any_format_in_a_course_folder_without_the_token(self):
+        result = self.download("Diapositivas.pptx", b"PK\x03\x04 diapositivas", "application/octet-stream")
+        expected = self.downloads / "Mudel AI Connect" / "Control Avanzado" / "Diapositivas.pptx"
+        self.assertEqual(Path(result["path"]), expected)
+        self.assertEqual(expected.read_bytes(), b"PK\x03\x04 diapositivas")
+        self.assertFalse(result["already_downloaded"])
+        self.assertNotIn(TOKEN, json.dumps(result))
+        self.assertNotIn("token=old", json.dumps(result))
+        self.assertEqual(self.saved(), [str(Path("Mudel AI Connect/Control Avanzado/Diapositivas.pptx"))])
+
+    def test_repeating_reuses_the_file_and_never_overwrites_a_different_one(self):
+        first = self.download(body=b"%PDF- v1")
+        again = self.download(body=b"%PDF- v1")
+        self.assertEqual(again["path"], first["path"])
+        self.assertTrue(again["already_downloaded"])
+        changed = self.download(body=b"%PDF- v2")
+        self.assertEqual(Path(changed["path"]).name, "Tema 1 (1).pdf")
+        self.assertEqual(Path(first["path"]).read_bytes(), b"%PDF- v1")
+        self.assertEqual(len(self.saved()), 2)
+
+    def test_hostile_names_stay_inside_the_course_folder(self):
+        for name, expected in [("../../../Startup/x.pdf", "_.._.._Startup_x.pdf"), (".bashrc", "bashrc"), ("CON.txt", "_CON.txt"),
+                               ("..", "archivo"), ('a<b>:"c"?.txt', "a_b___c__.txt"), ("nota. ", "nota")]:
+            with self.subTest(name=name):
+                path = Path(self.download(name, b"texto")["path"])
+                self.assertEqual(path.parent, self.downloads / "Mudel AI Connect" / "Control Avanzado")
+                self.assertEqual(path.name, expected)
+        folder = Path(self.download(course="../Windows")["path"]).parent
+        self.assertEqual(folder.parent, self.downloads / "Mudel AI Connect")
+
+    def test_programs_courses_of_others_and_big_files_are_refused_before_downloading(self):
+        for kwargs, message in [({"name": "setup.exe"}, "programas"), ({"name": "apuntes.PDF.js"}, "programas"),
+                                ({"course_id": 8}, "no está entre"),
+                                ({"filesize": server.MAX_DOWNLOAD_BYTES + 1}, "200 MiB")]:
+            with self.subTest(kwargs=kwargs), self.assertRaisesRegex(ToolError, message):
+                self.download(**kwargs)
+        self.assertEqual(self.files_requested, 0)
+        self.assertEqual(self.saved(), [])
+
+    def test_failed_downloads_leave_nothing_behind(self):
+        with self.assertRaisesRegex(ToolError, "permiso de descarga"):
+            self.download(body=b'{"error": "nopermissions"}', content_type="application/json")
+        with patch.object(server, "MAX_DOWNLOAD_BYTES", 4), self.assertRaisesRegex(ToolError, "límite"):
+            self.download(body=b"12345", filesize=1)
+        self.assertEqual(self.saved(), [])
+
+    def test_uses_the_chosen_folder_and_falls_back_to_downloads_when_it_is_missing(self):
+        chosen = self.downloads.parent / "Universidad"
+        chosen.mkdir()
+        default = self.downloads / "Mudel AI Connect" / "Control Avanzado" / "Tema 1.pdf"
+        runtime.save_download_folder(chosen)
+        result = self.download()
+        self.assertEqual(Path(result["path"]), chosen / "Control Avanzado" / "Tema 1.pdf")
+        self.assertNotIn("Descargas", result["note"])
+        runtime.save_download_folder(chosen / "USB desconectado")
+        result = self.download()
+        self.assertEqual(Path(result["path"]), default)
+        self.assertIn("No se encontró la carpeta elegida", result["note"])
+        self.assertFalse((chosen / "USB desconectado").exists())
+        (runtime.data_dir() / "downloads.json").write_text("roto", encoding="utf-8")
+        result = self.download()
+        self.assertEqual(Path(result["path"]), default)
+        self.assertIn("Vuelve a elegirla", result["note"])
+        runtime.save_download_folder(None)
+        self.assertEqual(Path(self.download()["path"]), default)
+
+    @unittest.skipUnless(sys.platform == "win32", "Marca de origen de Windows")
+    def test_windows_marks_the_file_as_downloaded_from_the_internet(self):
+        path = self.download()["path"]
+        with open(f"{path}:Zone.Identifier", encoding="utf-8") as stream:
+            mark = stream.read()
+        self.assertIn("ZoneId=3", mark)
+        self.assertNotIn(TOKEN, mark)
+
+
+class DownloadsFolderTests(unittest.TestCase):
+    def test_finds_the_downloads_folder_of_the_user(self):
+        folder = runtime.downloads_dir()
+        self.assertTrue(folder.is_absolute())
+        if sys.platform == "win32" and (Path.home() / "Downloads").is_dir() and not os.environ.get("CI"):
+            self.assertTrue(folder.is_dir())
+
+
 class ProtocolTests(unittest.IsolatedAsyncioTestCase):
     async def test_tools_return_moodle_context_through_mcp(self):
         def handler(request):
@@ -200,8 +323,11 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
                 tools = (await client.list_tools()).tools
                 self.assertEqual({tool.name for tool in tools}, {
                     "moodle_status", "list_courses", "get_course_context", "list_assignments",
-                    "get_upcoming_events", "read_course_file"})
-                self.assertTrue(all(tool.annotations.read_only_hint for tool in tools))
+                    "get_upcoming_events", "read_course_file", "download_course_file"})
+                for tool in tools:
+                    # Ninguna cambia Moodle; la descarga escribe en el PC, sin borrar ni sobrescribir.
+                    self.assertFalse(tool.annotations.destructive_hint, tool.name)
+                    self.assertEqual(tool.annotations.read_only_hint, tool.name != "download_course_file", tool.name)
                 missing = await client.call_tool("moodle_status")
                 self.assertTrue(missing.is_error)
                 self.assertIn("MOODLE_TOKEN", missing.content[0].text)
@@ -216,7 +342,7 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
             env={"MOODLE_URL": BASE, "MOODLE_TOKEN": "", "PYTHONIOENCODING": "utf-8"},
         )
         async with Client(params) as client:
-            self.assertEqual(len((await client.list_tools()).tools), 6)
+            self.assertEqual(len((await client.list_tools()).tools), 7)
             result = await client.call_tool("moodle_status")
             self.assertTrue(result.is_error)
             self.assertIn("MOODLE_TOKEN", result.content[0].text)

@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "mudel-ai-connect",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Mudel AI Connect permite consultar tus asignaturas, materiales y fechas de Moodle y estudiar con fuentes.",
   "keywords": ["moodle", "estudio", "educacion", "mcp"],
   "extensions": {

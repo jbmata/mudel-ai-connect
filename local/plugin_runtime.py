@@ -21,6 +21,7 @@ PERMISSIONS = {
     "materials": "Materiales y archivos",
     "assignments": "Tareas",
     "calendar": "Calendario",
+    "downloads": "Descargar archivos a tu carpeta Descargas",
 }
 
 
@@ -49,7 +50,11 @@ def _validate_permissions(values: dict[str, bool]) -> dict[str, bool]:
 
 def read_permissions() -> dict[str, bool]:
     try:
-        return _validate_permissions(json.loads((data_dir() / "permissions.json").read_text(encoding="utf-8")))
+        values = json.loads((data_dir() / "permissions.json").read_text(encoding="utf-8"))
+        if isinstance(values, dict) and "downloads" not in values and "materials" in values:
+            # Guardados antes de existir las descargas: siguen lo que se eligió para los materiales.
+            values = {**values, "downloads": values["materials"]}
+        return _validate_permissions(values)
     except FileNotFoundError:
         return dict.fromkeys(PERMISSIONS, True)
     except (OSError, ValueError):
@@ -58,6 +63,62 @@ def read_permissions() -> dict[str, bool]:
 
 def save_permissions(values: dict[str, bool]) -> None:
     _write_json(data_dir() / "permissions.json", _validate_permissions(values))
+
+
+def downloads_dir() -> Path:
+    """Carpeta Descargas del usuario, también si Windows la ha movido (por ejemplo, a OneDrive)."""
+    if sys.platform == "win32":
+        import ctypes
+        from ctypes import wintypes
+
+        class GUID(ctypes.Structure):
+            _fields_ = [("Data1", wintypes.DWORD), ("Data2", wintypes.WORD),
+                        ("Data3", wintypes.WORD), ("Data4", ctypes.c_ubyte * 8)]
+
+        folder_id = GUID(0x374DE290, 0x123F, 0x4565,  # FOLDERID_Downloads
+                         (ctypes.c_ubyte * 8)(0x91, 0x64, 0x39, 0xC4, 0x92, 0x5E, 0x46, 0x7B))
+        shell32, ole32 = ctypes.WinDLL("shell32"), ctypes.WinDLL("ole32")
+        shell32.SHGetKnownFolderPath.argtypes = [ctypes.POINTER(GUID), ctypes.c_uint32, ctypes.c_void_p,
+                                                 ctypes.POINTER(ctypes.c_void_p)]
+        ole32.CoTaskMemFree.argtypes = [ctypes.c_void_p]
+        pointer = ctypes.c_void_p()
+        if shell32.SHGetKnownFolderPath(ctypes.byref(folder_id), 0, None, ctypes.byref(pointer)) == 0:
+            try:
+                return Path(ctypes.wstring_at(pointer.value))
+            finally:
+                ole32.CoTaskMemFree(pointer)
+    return Path.home() / "Downloads"
+
+
+def default_download_folder() -> Path:
+    return downloads_dir() / "Mudel AI Connect"
+
+
+def read_download_folder() -> Path | None:
+    """Carpeta que eligió el usuario en el instalador, o None si usa la predeterminada.
+
+    Solo la elige el usuario: la IA no puede indicar dónde se guarda un archivo.
+    """
+    try:
+        values = json.loads((data_dir() / "downloads.json").read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError):
+        raise ValueError("No se pudo leer la carpeta de descargas. Vuelve a elegirla en Permisos.") from None
+    folder = values.get("folder") if isinstance(values, dict) else None
+    if not isinstance(folder, str) or not Path(folder).is_absolute():
+        raise ValueError("No se pudo leer la carpeta de descargas. Vuelve a elegirla en Permisos.")
+    return Path(folder)
+
+
+def save_download_folder(folder: Path | None) -> None:
+    target = data_dir() / "downloads.json"
+    if folder is None:
+        target.unlink(missing_ok=True)
+        return
+    if not Path(folder).is_absolute():
+        raise ValueError("La carpeta de descargas debe ser una ruta completa.")
+    _write_json(target, {"folder": str(Path(folder))})
 
 
 def _dpapi(data: bytes, protect: bool) -> bytes:

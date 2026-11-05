@@ -235,6 +235,33 @@ class SetupWindowTests(unittest.TestCase):
                         if isinstance(child, tk.Checkbutton) and child.cget("text") == "Calendario")
         self.assertFalse(bool(reopened.getvar(calendar.cget("variable"))))
 
+    def test_download_folder_is_chosen_by_the_user_and_cancel_keeps_the_previous_one(self):
+        chosen = self.home / "Universidad"
+        chosen.mkdir()
+        window = mudel_ai_connect_setup.SetupWindow(self.root)
+
+        def open_dialog():
+            window.permissions_button.invoke()
+            dialog = [child for child in self.root.winfo_children() if isinstance(child, tk.Toplevel)][-1]
+            panel = dialog.winfo_children()[0]
+            labels = [widget.cget("text") for frame in panel.winfo_children() if isinstance(frame, tk.Frame)
+                      for widget in frame.winfo_children() if isinstance(widget, tk.Label)]
+            return dialog, panel, next(text for text in labels if text.startswith("Se guardan en"))
+
+        dialog, panel, shown = open_dialog()
+        self.assertIn("Mudel AI Connect", shown)
+        with patch.object(mudel_ai_connect_setup.filedialog, "askdirectory", return_value=str(chosen)):
+            window.download_folder_button.invoke()
+        panel.winfo_children()[-1].winfo_children()[0].invoke()  # Guardar
+        self.assertEqual(runtime.read_download_folder(), chosen)
+
+        dialog, panel, shown = open_dialog()
+        self.assertIn(str(chosen), shown)
+        with patch.object(mudel_ai_connect_setup.filedialog, "askdirectory", return_value=str(self.home)):
+            window.download_folder_button.invoke()
+        panel.winfo_children()[-1].winfo_children()[1].invoke()  # Cancelar
+        self.assertEqual(runtime.read_download_folder(), chosen)
+
     def test_invalid_permissions_open_with_all_queries_disabled_and_cancel_preserves_them(self):
         folder = runtime.data_dir()
         folder.mkdir(parents=True)
@@ -245,7 +272,7 @@ class SetupWindowTests(unittest.TestCase):
         dialog = next(child for child in self.root.winfo_children() if isinstance(child, tk.Toplevel))
         panel = dialog.winfo_children()[0]
         checks = [child for child in panel.winfo_children() if isinstance(child, tk.Checkbutton)]
-        self.assertEqual(len(checks), 4)
+        self.assertEqual(len(checks), len(runtime.PERMISSIONS))
         self.assertTrue(all(not bool(dialog.getvar(child.cget("variable"))) for child in checks))
         panel.winfo_children()[-1].winfo_children()[1].invoke()
         self.assertEqual(policy.read_text(encoding="utf-8"), "invalid")

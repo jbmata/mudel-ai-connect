@@ -2,7 +2,8 @@
 
 Consulta asignaturas, estudia con sus materiales y organiza tareas desde un cliente
 de IA compatible con MCP. Está preparado para [SIFO de Comillas](https://sifo.comillas.edu/)
-y utiliza los permisos de la cuenta conectada. Las herramientas son de lectura.
+y utiliza los permisos de la cuenta conectada. Nada cambia en Moodle: las herramientas
+leen, y la de descarga solo guarda archivos en tu carpeta Descargas.
 
 Programa local para Windows y plugin con Python 3.11 o superior.
 Instalación: [guía del programa](local/README.md) · [guía del plugin](local/PLUGIN.md).
@@ -43,9 +44,10 @@ ChatGPT Work local y Codex comparten configuración y aparecen juntos en una cas
 del instalador. El PC debe estar encendido mientras utilizas la conexión.
 
 El núcleo está en [`shared/`](shared/moodle_mcp.py): el cliente de Moodle y las
-seis herramientas. El instalador guarda la clave cifrada en tu perfil de Windows.
+siete herramientas. El instalador guarda la clave cifrada en tu perfil de Windows.
 Su botón **Permisos** permite elegir si la IA puede consultar asignaturas,
-materiales, tareas y calendario; el MCP bloquea las consultas desactivadas.
+materiales, tareas y calendario, y si puede descargar archivos; el MCP bloquea lo
+que esté desactivado.
 
 ```text
 MCP-MOODLE/
@@ -68,6 +70,7 @@ Consulta la [guía de instalación](local/README.md) y los pasos para
 | `list_assignments` | Leer enunciados y plazos de tareas. |
 | `get_upcoming_events` | Consultar los próximos eventos del calendario. |
 | `read_course_file` | Extraer texto de PDF, TXT, MD, CSV y HTML del curso. |
+| `download_course_file` | Guardar un archivo del curso, en cualquier formato, en tu carpeta Descargas. |
 
 - [`mudel-ai-connect-study`](local/skills/mudel-ai-connect-study/SKILL.md): consulta, estudio con fuentes y
   planificación. Se incluye en el plugin local.
@@ -81,6 +84,7 @@ Ejemplos de uso:
 - «Consulta Moodle y dime qué asignaturas tengo».
 - «Lee los apuntes del tema 2 de Control Avanzado y explícamelos con fuentes».
 - «Consulta las tareas y el calendario y ayúdame a planificar la semana».
+- «Descárgame las diapositivas del tema 3 de Control Avanzado».
 
 ## Clave de Moodle
 
@@ -132,7 +136,10 @@ sus propias licencias.
 
 ## Límites
 
-- Solo consulta: no entrega trabajos, envía mensajes ni modifica cursos.
+- No cambia nada en Moodle: no entrega trabajos, envía mensajes ni modifica cursos.
+- Las descargas van a `Descargas\Mudel AI Connect\<asignatura>` o a la carpeta que
+  elijas en **Permisos**, sin sobrescribir archivos, hasta 200 MiB y sin programas ni
+  scripts (`.exe`, `.bat`, `.js`…). La IA no puede elegir la carpeta.
 - Los enunciados y plazos no indican si has entregado. Verifica las prórrogas
   personales en Moodle. Las fechas se devuelven en UTC.
 - El calendario muestra el horizonte que devuelve Moodle, no todos los eventos.

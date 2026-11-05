@@ -1,5 +1,16 @@
 # Cambios
 
+## v0.2.0 — beta
+
+- Herramienta `download_course_file`: guarda un archivo del curso, en cualquier formato,
+  en `Descargas\Mudel AI Connect\<asignatura>`. No sobrescribe nada, reutiliza el archivo si
+  ya está igual y Windows lo marca como descargado de internet. No descarga programas ni
+  scripts (`.exe`, `.bat`, `.js`…) y admite hasta 200 MiB.
+- Permiso nuevo **Descargar archivos a tu carpeta Descargas**. Si ya habías guardado tus
+  permisos, toma el valor que elegiste para «Materiales y archivos».
+- En **Permisos → Cambiar carpeta…** eliges dónde se guardan las descargas. Si esa carpeta
+  no está disponible, se guardan en Descargas y se avisa.
+
 ## v0.1.0 — beta
 
 Primera versión de prueba. Pensada para un grupo reducido que pueda informar de fallos.

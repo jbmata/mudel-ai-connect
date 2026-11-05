@@ -1,4 +1,4 @@
-# Mudel AI Connect 0.1.0
+# Mudel AI Connect 0.2.0
 
 Mudel AI Connect reúne el conector MCP de Moodle y las skills `mudel-ai-connect-study`
 (consulta, estudio y organización con fuentes) y `setup` (configuración de la cuenta).
@@ -111,6 +111,10 @@ La IA consulta los datos cuando los necesita y cita los materiales utilizados.
 Las secciones y los archivos pueden requerir varias llamadas para leerlos enteros.
 Se admiten PDF con texto, HTML, TXT, MD y CSV de hasta 10 MiB por respuesta. No hay
 OCR ni lectura de DOCX, PPTX, vídeo o enlaces alojados fuera del campus.
+
+Esos formatos sí se pueden descargar con `download_course_file`: se guardan en
+`Descargas/Mudel AI Connect/<asignatura>` (o en la carpeta elegida en **Permisos**
+del instalador), sin sobrescribir archivos, hasta 200 MiB y sin programas ni scripts.
 
 Los avisos de falta de permiso indican que el resultado puede estar incompleto.
 Los plazos de tareas no indican si ya has entregado, y el calendario puede mostrar

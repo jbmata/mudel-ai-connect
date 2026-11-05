@@ -7,7 +7,7 @@ import sys
 import threading
 import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 
 import mudel_ai_connect_installer as installer
 
@@ -318,7 +318,7 @@ class SetupWindow:
         dialog.configure(background=PAPER)
         panel = tk.Frame(dialog, background=PAPER, padx=24, pady=20)
         panel.pack()
-        notice = "Elige qué puede consultar la IA en este equipo."
+        notice = "Elige qué puede consultar y descargar la IA en este equipo."
         try:
             allowed = installer.read_permissions()
         except ValueError as error:
@@ -333,6 +333,45 @@ class SetupWindow:
             tk.Checkbutton(panel, text=label, variable=variable, font=(FONT, 11),
                            foreground=INK, background=PAPER, activebackground=PAPER,
                            activeforeground=PINK, selectcolor=PAPER, anchor="w").pack(anchor="w")
+
+        # La carpeta la elige el usuario aquí; la IA no puede indicar dónde se guarda nada.
+        try:
+            chosen = {"folder": installer.read_download_folder()}
+        except ValueError:
+            chosen = {"folder": None}
+        downloads = tk.Frame(panel, background=PAPER)
+        downloads.pack(anchor="w", fill="x", padx=(26, 0))
+        folder_label = tk.Label(downloads, wraplength=330, justify="left", font=(FONT, 9),
+                                foreground=MUTED, background=PAPER)
+        folder_label.pack(anchor="w")
+
+        def show_folder() -> None:
+            folder = chosen["folder"] or installer.default_download_folder()
+            folder_label.configure(text=f"Se guardan en: {folder}")
+            reset.configure(state="normal" if chosen["folder"] else "disabled")
+
+        def pick_folder() -> None:
+            start = chosen["folder"] or installer.default_download_folder().parent
+            picked = filedialog.askdirectory(parent=dialog, title="Carpeta para las descargas",
+                                             initialdir=str(start), mustexist=True)
+            if picked:
+                chosen["folder"] = Path(picked)
+                show_folder()
+
+        def reset_folder() -> None:
+            chosen["folder"] = None
+            show_folder()
+
+        buttons = tk.Frame(downloads, background=PAPER)
+        buttons.pack(anchor="w", pady=(2, 0))
+        self.download_folder_button = tk.Button(buttons, text="Cambiar carpeta…", command=pick_folder,
+                                                font=(FONT, 9), foreground=INK, background=PAPER, padx=8)
+        self.download_folder_button.pack(side="left")
+        reset = tk.Button(buttons, text="Usar la predeterminada", command=reset_folder,
+                          font=(FONT, 9), foreground=INK, background=PAPER, padx=8)
+        reset.pack(side="left", padx=(6, 0))
+        show_folder()
+
         tk.Label(panel, text=(
             "El estado de conexión sigue disponible para diagnóstico.\n"
             "Los permisos se comparten entre los clientes de IA de este usuario.\n"
@@ -343,6 +382,7 @@ class SetupWindow:
         def save() -> None:
             try:
                 installer.save_permissions({name: variable.get() for name, variable in variables.items()})
+                installer.save_download_folder(chosen["folder"])
             except (OSError, ValueError):
                 messagebox.showerror("Permisos", "No se pudieron guardar los permisos. Vuelve a intentarlo.", parent=dialog)
                 return

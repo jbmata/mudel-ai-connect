@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import filecmp
 import json
 import os
 import re
 import sys
+import tempfile
+import unicodedata
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from io import BytesIO
@@ -36,10 +39,22 @@ FUNCTIONS = (
     "core_calendar_get_calendar_upcoming_view",
 )
 MAX_BYTES = 10 * 1024 * 1024
+MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024
+DOWNLOAD_FOLDER = "Mudel AI Connect"
+# Se ejecutan con un doble clic. Un material de clase casi nunca lo es, y si alguien lo sube
+# a un curso, mejor que el usuario lo descargue a propósito desde el navegador.
+BLOCKED_EXTENSIONS = frozenset({
+    ".appx", ".bat", ".cmd", ".com", ".cpl", ".exe", ".hta", ".img", ".iso", ".jse", ".js", ".lnk",
+    ".msc", ".msi", ".msix", ".pif", ".ps1", ".reg", ".scf", ".scr", ".url", ".vbe", ".vbs",
+    ".vhd", ".vhdx", ".wsf", ".wsh",
+})
+RESERVED_NAMES = frozenset({"CON", "PRN", "AUX", "NUL", *(f"COM{n}" for n in range(1, 10)),
+                            *(f"LPT{n}" for n in range(1, 10))})
 INSTRUCTIONS = """Consulta Moodle para responder sobre las asignaturas del usuario.
 Primero usa list_courses y después get_course_context del curso pertinente.
 Recorre next_section_start si necesitas el curso entero. Lee con read_course_file
-los materiales relevantes antes de explicarlos. Consulta list_assignments y
+los materiales relevantes antes de explicarlos. Usa download_course_file solo cuando
+el usuario pida descargar o guardar un archivo, y dile la ruta en la que quedó. Consulta list_assignments y
 get_upcoming_events para entregas y fechas. No confundas fecha de entrega con
 estado de entrega: estas herramientas no comprueban si el alumno ha entregado.
 Cita las URL de origen. Si falta acceso o hay contenido truncado, dilo.
@@ -50,6 +65,11 @@ Si una consulta está desactivada por el usuario, explica el límite sin intenta
 """
 READ_ONLY = ToolAnnotations(
     read_only_hint=True, destructive_hint=False, idempotent_hint=True,
+    open_world_hint=True,
+)
+# Moodle sigue sin cambios; solo escribe en la carpeta Descargas, sin sobrescribir nada.
+SAVES_LOCALLY = ToolAnnotations(
+    read_only_hint=False, destructive_hint=False, idempotent_hint=True,
     open_world_hint=True,
 )
 PositiveId = Annotated[int, Field(gt=0)]
@@ -101,7 +121,8 @@ class MoodleClient:
             raise ToolError("Falta MOODLE_TOKEN válido en .env. Es una clave de servicios web, no tu contraseña.")
         self.transport = transport
 
-    def request(self, url: str, data: dict[str, Any]) -> tuple[bytes, str]:
+    def stream(self, url: str, data: dict[str, Any], out: Any, limit: int) -> str:
+        """Escribe la respuesta en `out` sin pasar de `limit` bytes y devuelve su tipo de contenido."""
         try:
             with httpx.Client(timeout=30, follow_redirects=False, trust_env=False,
                               transport=self.transport) as client:
@@ -109,14 +130,20 @@ class MoodleClient:
                     if 300 <= response.status_code < 400:
                         raise ToolError("Moodle redirige la petición. Comprueba la URL del campus y el acceso a servicios web.")
                     response.raise_for_status()
-                    body = bytearray()
+                    size = 0
                     for chunk in response.iter_bytes():
-                        body.extend(chunk)
-                        if len(body) > MAX_BYTES:
-                            raise ToolError("La respuesta supera el límite de 10 MiB.")
-                    return bytes(body), response.headers.get("content-type", "")
+                        size += len(chunk)
+                        if size > limit:
+                            raise ToolError(f"La respuesta supera el límite de {limit // (1024 * 1024)} MiB.")
+                        out.write(chunk)
+                    return response.headers.get("content-type", "")
         except httpx.HTTPError:
             raise ToolError("No se pudo consultar Moodle. Comprueba la conexión, la URL y los permisos del token.") from None
+
+    def request(self, url: str, data: dict[str, Any]) -> tuple[bytes, str]:
+        body = BytesIO()
+        content_type = self.stream(url, data, body, MAX_BYTES)
+        return body.getvalue(), content_type
 
     def call(self, function: str, **params: Any) -> Any:
         if function not in FUNCTIONS:
@@ -154,7 +181,32 @@ class MoodleClient:
             raise ToolError("Moodle no devolvió la lista de secciones esperada.")
         return result
 
+    def enrolled_courses(self) -> list[dict]:
+        info = self.call("core_webservice_get_site_info")
+        courses = self.call("core_enrol_get_users_courses", userid=info["userid"])
+        if not isinstance(courses, list):
+            raise ToolError("Moodle no devolvió la lista de asignaturas esperada.")
+        return courses
+
+    def course_file(self, course_id: int, module_id: int, file_index: int) -> tuple[dict, dict]:
+        """Módulo y archivo pedidos, solo si están en el curso que Moodle deja ver a esta cuenta."""
+        module = next((module for section in self.contents(course_id)
+                       for module in section.get("modules", []) if module["id"] == module_id), None)
+        if module is None or file_index >= len(module.get("contents", [])):
+            raise ToolError("No se encontró ese módulo o índice de archivo en el curso accesible.")
+        item = module["contents"][file_index]
+        if item.get("type") != "file" or not item.get("fileurl"):
+            raise ToolError("Ese contenido no es un archivo descargable de Moodle.")
+        return module, item
+
+    def save(self, file_url: str, out: Any, limit: int) -> str:
+        return self.stream(self.file_request_url(file_url), {"token": self.token}, out, limit)
+
     def download(self, file_url: str) -> tuple[bytes, str]:
+        return self.request(self.file_request_url(file_url), {"token": self.token})
+
+    def file_request_url(self, file_url: str) -> str:
+        """Solo archivos del mismo Moodle, por su endpoint de servicios web y sin el token en la URL."""
         parsed, base = urlsplit(file_url), urlsplit(self.base_url)
         if (parsed.scheme, parsed.netloc) != (base.scheme, base.netloc):
             raise ToolError("El archivo no pertenece al mismo servidor Moodle.")
@@ -166,8 +218,68 @@ class MoodleClient:
                 or not (parsed.path.startswith(endpoint + "/")
                         or (parsed.path == endpoint and any(key == "file" and value.startswith("/") for key, value in query)))):
             raise ToolError("Solo se admiten archivos del endpoint webservice/pluginfile.php de Moodle.")
-        url = urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(query), ""))
-        return self.request(url, {"token": self.token})
+        return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(query), ""))
+
+
+def download_root() -> tuple[Path, str | None]:
+    """Carpeta elegida por el usuario en el instalador o Descargas\\Mudel AI Connect.
+
+    Si la elegida no está (un USB desconectado, una carpeta borrada), se usa Descargas y se avisa.
+    """
+    try:
+        from plugin_runtime import default_download_folder, read_download_folder
+    except ImportError:
+        return Path.home() / "Downloads" / DOWNLOAD_FOLDER, None
+    try:
+        chosen = read_download_folder()
+    except ValueError:
+        return default_download_folder(), ("No se pudo leer la carpeta elegida; se ha guardado en Descargas. "
+                                           "Vuelve a elegirla en Permisos.")
+    if chosen is None:
+        return default_download_folder(), None
+    if not chosen.is_dir():
+        return default_download_folder(), (f"No se encontró la carpeta elegida ({chosen}); se ha guardado en "
+                                           "Descargas.")
+    return chosen, None
+
+
+def safe_filename(name: str, fallback: str = "archivo") -> str:
+    """Nombre que no sale de la carpeta de destino ni choca con nombres reservados de Windows."""
+    name = unicodedata.normalize("NFC", name)
+    name = re.sub(r'[\x00-\x1f\x7f<>:"/\\|?*]', "_", name).strip().strip(".").strip()
+    if not name:
+        name = fallback
+    if name.split(".")[0].strip().upper() in RESERVED_NAMES:
+        name = "_" + name
+    stem, suffix = os.path.splitext(name)
+    suffix = suffix[:16]
+    return stem[:120 - len(suffix)].rstrip(" .") + suffix if len(name) > 120 else name
+
+
+def place(temporary: Path, wanted: Path) -> tuple[Path, bool]:
+    """Mueve la descarga a su nombre sin sobrescribir: si ya está igual, reutiliza la existente."""
+    stem, suffix = os.path.splitext(wanted.name)
+    for number in range(1000):
+        candidate = wanted if number == 0 else wanted.with_name(f"{stem} ({number}){suffix}")
+        if candidate.exists():
+            if candidate.is_file() and filecmp.cmp(candidate, temporary, shallow=False):
+                temporary.unlink()
+                return candidate, False
+            continue
+        os.rename(temporary, candidate)  # En Windows falla si otro proceso lo ha creado justo antes.
+        return candidate, True
+    raise ToolError("Hay demasiadas copias con ese nombre en la carpeta de descargas.")
+
+
+def mark_from_internet(path: Path, source_url: str) -> None:
+    """Como un navegador: Windows avisará antes de abrir el archivo y Office usará la vista protegida."""
+    if sys.platform != "win32":
+        return
+    try:
+        with open(f"{path}:Zone.Identifier", "w", encoding="utf-8") as stream:
+            stream.write(f"[ZoneTransfer]\nZoneId=3\nHostUrl={source_url}\n")
+    except OSError:
+        pass  # Unidades FAT o de red sin flujos alternativos: el archivo ya está guardado.
 
 
 def read_credentials() -> dict[str, str]:
@@ -221,8 +333,7 @@ def list_courses() -> dict[str, Any]:
     """Lista las asignaturas de la cuenta conectada, con sus identificadores y enlaces."""
     require_permission("courses")
     client = get_client()
-    info = client.call("core_webservice_get_site_info")
-    courses = client.call("core_enrol_get_users_courses", userid=info["userid"])
+    courses = client.enrolled_courses()
     return client.clean({"courses": [{
         "id": c["id"], "name": text(c["fullname"]), "shortname": c.get("shortname"),
         "summary": text(c.get("summary", ""))[:4000],
@@ -301,13 +412,7 @@ def read_course_file(course_id: PositiveId, module_id: PositiveId, file_index: O
     """Lee un PDF, HTML o texto de un módulo del curso. Usa los IDs e índices de get_course_context y pagina con next_offset."""
     require_permission("materials")
     client = get_client()
-    module = next((module for section in client.contents(course_id)
-                   for module in section.get("modules", []) if module["id"] == module_id), None)
-    if module is None or file_index >= len(module.get("contents", [])):
-        raise ToolError("No se encontró ese módulo o índice de archivo en el curso accesible.")
-    item = module["contents"][file_index]
-    if item.get("type") != "file" or not item.get("fileurl"):
-        raise ToolError("Ese contenido no es un archivo descargable de Moodle.")
+    module, item = client.course_file(course_id, module_id, file_index)
     name = item.get("filename", "")
     extension = Path(name).suffix.lower()
     if extension not in {".pdf", ".txt", ".md", ".csv", ".html", ".htm"}:
@@ -340,6 +445,48 @@ def read_course_file(course_id: PositiveId, module_id: PositiveId, file_index: O
                          "module_url": module.get("url"), "text": document[offset:end],
                          "total_characters": len(document), "offset": offset,
                          "next_offset": end if end < len(document) else None})
+
+
+@mcp.tool(annotations=SAVES_LOCALLY)
+def download_course_file(course_id: PositiveId, module_id: PositiveId, file_index: Offset = 0) -> dict[str, Any]:
+    """Guarda un archivo del curso, en cualquier formato, en la carpeta de descargas que eligió el usuario. Úsalo solo
+    si el usuario pide descargarlo o guardarlo. Usa los IDs e índices de get_course_context. No abre el archivo."""
+    require_permission("downloads")
+    client = get_client()
+    course = next((course for course in client.enrolled_courses() if course.get("id") == course_id), None)
+    if course is None:
+        raise ToolError("Ese curso no está entre las asignaturas de la cuenta conectada.")
+    module, item = client.course_file(course_id, module_id, file_index)
+    name = safe_filename(item.get("filename", ""))
+    if os.path.splitext(name)[1].lower() in BLOCKED_EXTENSIONS:
+        raise ToolError("Por seguridad no se descargan programas ni scripts. Descárgalo desde Moodle en el navegador.")
+    if item.get("filesize", 0) > MAX_DOWNLOAD_BYTES:
+        raise ToolError("El archivo supera el límite de 200 MiB. Descárgalo desde Moodle en el navegador.")
+    root, fallback = download_root()
+    folder = root / safe_filename(text(course.get("fullname", "")), f"curso {course_id}")
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        handle = tempfile.NamedTemporaryFile(dir=folder, prefix=".mudel-", suffix=".part", delete=False)
+    except OSError:
+        raise ToolError("No se pudo escribir en la carpeta de descargas.") from None
+    temporary = Path(handle.name)
+    try:
+        with handle:
+            content_type = client.save(item["fileurl"], handle, MAX_DOWNLOAD_BYTES)
+        if "json" in content_type:
+            raise ToolError("Moodle devolvió un error al descargar. Comprueba el permiso de descarga de archivos del servicio.")
+        path, created = place(temporary, folder / name)
+    except OSError:
+        raise ToolError("No se pudo guardar el archivo en la carpeta de descargas.") from None
+    finally:
+        temporary.unlink(missing_ok=True)
+    source_url = client.clean(item["fileurl"])
+    mark_from_internet(path, source_url)
+    return client.clean({"path": str(path), "filename": path.name, "size_bytes": path.stat().st_size,
+                         "already_downloaded": not created, "source_url": source_url,
+                         "module_url": module.get("url"),
+                         "note": " ".join(filter(None, [fallback, "Guardado en este equipo; no se ha abierto "
+                                                                  "ni enviado a ningún sitio."]))})
 
 
 @mcp.prompt()

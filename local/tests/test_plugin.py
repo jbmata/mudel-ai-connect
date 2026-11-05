@@ -190,7 +190,7 @@ class ExtractedPluginTests(unittest.IsolatedAsyncioTestCase):
                 env={"MOODLE_URL": "https://campus.example", "MOODLE_TOKEN": "", "PYTHONIOENCODING": "utf-8"},
             )
             async with Client(params) as client:
-                self.assertEqual(len((await client.list_tools()).tools), 6)
+                self.assertEqual(len((await client.list_tools()).tools), 7)
                 status = await client.call_tool("moodle_status")
                 self.assertTrue(status.is_error)
                 self.assertIn("MOODLE_TOKEN", status.content[0].text)
@@ -221,6 +221,7 @@ class PermissionTests(unittest.IsolatedAsyncioTestCase):
             ("materials", moodle_mcp.read_course_file, (7, 90)),
             ("assignments", moodle_mcp.list_assignments, (7,)),
             ("calendar", moodle_mcp.get_upcoming_events, ()),
+            ("downloads", moodle_mcp.download_course_file, (7, 90)),
         )
         for permission, query, arguments in queries:
             allowed = dict.fromkeys(runtime.PERMISSIONS, True)
@@ -233,6 +234,29 @@ class PermissionTests(unittest.IsolatedAsyncioTestCase):
                 client.assert_not_called()
                 for other in runtime.PERMISSIONS.keys() - {permission}:
                     moodle_mcp.require_permission(other)
+
+    def test_permissions_saved_before_downloads_existed_follow_the_materials_choice(self):
+        for materials in (True, False):
+            old = {"courses": True, "materials": materials, "assignments": True, "calendar": False}
+            (self.folder / "permissions.json").write_text(json.dumps(old), encoding="utf-8")
+            with self.subTest(materials=materials):
+                self.assertEqual(runtime.read_permissions(), {**old, "downloads": materials})
+
+    def test_download_folder_is_optional_absolute_and_resettable(self):
+        self.assertIsNone(runtime.read_download_folder())
+        self.assertEqual(runtime.default_download_folder().name, "Mudel AI Connect")
+        runtime.save_download_folder(self.folder / "Universidad")
+        self.assertEqual(runtime.read_download_folder(), self.folder / "Universidad")
+        with self.assertRaises(ValueError):
+            runtime.save_download_folder(Path("relativa"))
+        self.assertEqual(runtime.read_download_folder(), self.folder / "Universidad")
+        runtime.save_download_folder(None)
+        self.assertIsNone(runtime.read_download_folder())
+        for broken in ("PRIVATE_CANARY", json.dumps({"folder": "relativa"}), json.dumps([])):
+            (self.folder / "downloads.json").write_text(broken, encoding="utf-8")
+            with self.subTest(broken=broken), self.assertRaisesRegex(ValueError, "Vuelve a elegirla") as caught:
+                runtime.read_download_folder()
+            self.assertNotIn("PRIVATE_CANARY", str(caught.exception))
 
     def test_invalid_permissions_are_rejected_without_replacing_the_previous_selection(self):
         allowed = dict.fromkeys(runtime.PERMISSIONS, False)
@@ -265,7 +289,7 @@ class PermissionTests(unittest.IsolatedAsyncioTestCase):
         allowed = dict.fromkeys(runtime.PERMISSIONS, True)
         runtime.save_permissions(allowed)
         moodle = Mock()
-        moodle.call.side_effect = [{"userid": 3}, []]
+        moodle.enrolled_courses.return_value = []
         moodle.clean.side_effect = lambda result: result
         with patch.object(moodle_mcp, "get_client", return_value=moodle) as client:
             async with Client(moodle_mcp.mcp) as connection:

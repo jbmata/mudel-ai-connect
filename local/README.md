@@ -54,10 +54,19 @@ pulsa **Guardar**. Puedes cambiarlo sin volver a introducir el token ni reinstal
 | Materiales y archivos | Consultar temario y recursos con `get_course_context` y leer archivos con `read_course_file`. |
 | Tareas | Consultar enunciados y plazos con `list_assignments`. |
 | Calendario | Consultar eventos con `get_upcoming_events`. |
+| Descargar archivos a tu carpeta Descargas | Guardar archivos del curso con `download_course_file`. |
 
-El estado de conexión (`moodle_status`) sigue disponible para diagnóstico. Los
-cuatro grupos están activados inicialmente para conservar el comportamiento de
-las instalaciones existentes. Puedes desactivarlos todos.
+El estado de conexión (`moodle_status`) sigue disponible para diagnóstico. Todos
+los grupos están activados inicialmente para conservar el comportamiento de
+las instalaciones existentes. Puedes desactivarlos todos. Si guardaste tus permisos
+antes de que existieran las descargas, estas siguen lo que elegiste para los materiales.
+
+Las descargas van a `Descargas\Mudel AI Connect\<asignatura>`. En **Permisos →
+Cambiar carpeta…** puedes elegir otra; solo la eliges tú, la IA no puede indicar dónde
+se guarda. Si esa carpeta no está (por ejemplo, un USB desconectado), se guarda en
+Descargas y la IA te lo dice. No se sobrescribe
+ningún archivo: si ya existe uno distinto con el mismo nombre, se guarda como
+`nombre (1).pdf`. No se descargan programas ni scripts y el límite es de 200 MiB.
 
 Los permisos se guardan en `%LOCALAPPDATA%\mudel-ai-connect\permissions.json`,
 se comparten entre los clientes de IA del mismo usuario y se conservan al
@@ -119,7 +128,7 @@ Desde la raíz del proyecto:
 Se generan en `dist/`:
 
 - `Mudel-AI-Connect-Setup.exe`: el instalador, con el servidor y Python dentro.
-- `mudel-ai-connect-plugin-0.1.0.zip` y el marketplace `mudel-ai-connect-marketplace`, para instalar el
+- `mudel-ai-connect-plugin-0.2.0.zip` y el marketplace `mudel-ai-connect-marketplace`, para instalar el
   plugin local siguiendo `PLUGIN.md`.
 
 Los ZIP se construyen con una lista explícita de archivos públicos. `.env`,
