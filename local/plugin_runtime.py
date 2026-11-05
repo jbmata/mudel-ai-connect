@@ -111,12 +111,20 @@ def read_credentials(*, protect: bool | None = None) -> dict[str, str]:
         return {}
     try:
         values = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(values, dict) and isinstance(values.get("MOODLE_TOKEN_DPAPI"), str):
+            return read_protected_credentials(path)
         if not isinstance(values, dict) or any(not isinstance(values.get(key), str)
                                              for key in ("MOODLE_URL", "MOODLE_TOKEN")):
             raise ValueError
-        return {key: values[key] for key in ("MOODLE_URL", "MOODLE_TOKEN")}
+        account = {key: values[key] for key in ("MOODLE_URL", "MOODLE_TOKEN")}
     except (OSError, ValueError):
         raise ValueError("No se pudo leer la configuración local del plugin. Vuelve a ejecutar setup.") from None
+    if sys.platform == "win32":
+        try:  # Una versión anterior lo guardó sin cifrar: se cifra en cuanto se lee.
+            save_credentials(account["MOODLE_URL"], account["MOODLE_TOKEN"])
+        except (OSError, ValueError):
+            pass
+    return account
 
 
 def save_credentials(url: str, token: str, *, protect: bool = False) -> None:
@@ -134,7 +142,12 @@ def save_credentials(url: str, token: str, *, protect: bool = False) -> None:
                    "MOODLE_TOKEN_DPAPI": base64.b64encode(_dpapi(token.encode("ascii"), True)).decode("ascii")}
     else:
         target = credentials_path()
-        content = {"MOODLE_URL": url, "MOODLE_TOKEN": token}
+        if sys.platform == "win32":
+            # El plugin también cifra su token, en su propio archivo: desinstalar el programa no lo toca.
+            content = {"MOODLE_URL": url,
+                       "MOODLE_TOKEN_DPAPI": base64.b64encode(_dpapi(token.encode("ascii"), True)).decode("ascii")}
+        else:  # Sin DPAPI: queda con permisos solo para el usuario.
+            content = {"MOODLE_URL": url, "MOODLE_TOKEN": token}
     _write_json(target, content)
 
 

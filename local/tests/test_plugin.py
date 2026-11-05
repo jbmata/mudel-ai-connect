@@ -43,6 +43,21 @@ class PluginTests(unittest.TestCase):
                     runtime.save_credentials(url, token)
             self.assertEqual(list(Path(temporary).iterdir()), [runtime.credentials_path()])
 
+    @unittest.skipUnless(sys.platform == "win32", "DPAPI solo existe en Windows")
+    def test_plugin_token_is_encrypted_and_old_plain_ones_get_encrypted(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(runtime, "data_dir", return_value=Path(temporary)):
+            runtime.save_credentials("https://campus.example", "PluginToken123")
+            raw = runtime.credentials_path().read_text(encoding="utf-8")
+            self.assertNotIn("PluginToken123", raw)
+            self.assertIn("MOODLE_TOKEN_DPAPI", raw)
+            self.assertEqual(runtime.read_credentials(protect=False)["MOODLE_TOKEN"], "PluginToken123")
+            # Lo que guardó una versión anterior, sin cifrar
+            runtime.credentials_path().write_text(
+                json.dumps({"MOODLE_URL": "https://campus.example", "MOODLE_TOKEN": "OldPlainToken9"}), encoding="utf-8")
+            self.assertEqual(runtime.read_credentials()["MOODLE_TOKEN"], "OldPlainToken9")
+            self.assertNotIn("OldPlainToken9", runtime.credentials_path().read_text(encoding="utf-8"))
+            self.assertEqual(runtime.read_credentials()["MOODLE_TOKEN"], "OldPlainToken9")
+
     def test_invalid_config_does_not_echo_its_content(self):
         with tempfile.TemporaryDirectory() as temporary, patch.object(runtime, "data_dir", return_value=Path(temporary)):
             runtime.credentials_path().write_text("PRIVATE_SECRET_not_json", encoding="utf-8")

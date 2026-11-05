@@ -556,6 +556,8 @@ class SetupWindow:
         elif self.mode == "uninstall":
             self.step("Desinstalado" + (" de " + ", ".join(payload) if payload else ""), "done")
             self.step("Se conservan las copias de seguridad de tu configuración.", "note")
+            self.step("El token ya no está en tu PC, pero sigue siendo válido en Moodle: para anularlo, "
+                      "restablécelo en Moodle → Preferencias → Claves de seguridad.", "note")
         else:
             self.token.set("")
             self.step("Listo. Ya puedes consultar Moodle desde tu IA.", "done")

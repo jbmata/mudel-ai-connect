@@ -18,7 +18,12 @@ Moodle Pty Ltd ni a ninguna universidad. Moodle es una marca registrada de Moodl
 
 Qué sale de tu PC:
 
-- **Tu token de Moodle** solo se envía a tu Moodle. Se guarda cifrado con tu usuario de Windows.
+- **Tu token de Moodle** solo se envía a tu Moodle. Se guarda cifrado con tu usuario de Windows
+  (DPAPI): no sirve si alguien copia el archivo a otro equipo ni lo pueden leer otros usuarios
+  del PC, pero sí un programa que se ejecute con tu usuario. El programa nunca pide ni guarda
+  tu contraseña de Moodle.
+- **Desinstalar borra el token de tu PC, no lo anula en Moodle.** Si crees que alguien lo ha
+  visto, restablécelo en Moodle → Preferencias → Claves de seguridad.
 - **Lo que la IA lee de tus asignaturas** pasa por el proveedor de esa IA (Anthropic,
   OpenAI…), como cualquier conversación. Revisa la política de tu universidad antes de
   usarlo con materiales del curso.

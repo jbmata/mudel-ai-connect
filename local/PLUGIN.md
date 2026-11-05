@@ -17,7 +17,8 @@ python plugin_runtime.py setup
 
 El instalador prepara las dependencias en tu perfil local y pide la URL de Moodle
 y su clave de servicios web. La clave se escribe de forma oculta en el terminal;
-no la pegues en el chat. Se guarda como texto en un archivo de tu perfil:
+no la pegues en el chat. En Windows se guarda cifrada con tu usuario (DPAPI); en Linux
+y macOS, en texto con permisos solo para tu usuario. El archivo está en tu perfil:
 
 - Windows: `%LOCALAPPDATA%\mudel-ai-connect\credentials.json`.
 - Linux/macOS: `$XDG_DATA_HOME/mudel-ai-connect/credentials.json`, o
