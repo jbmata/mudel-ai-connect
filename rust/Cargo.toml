@@ -2,9 +2,21 @@
 name = "mudel-ai-connect-server"
 version = "0.2.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.89"
 license = "MIT"
 publish = false
+
+[[bin]]
+name = "mudel-ai-connect-server"
+path = "src/main.rs"
+
+[[bin]]
+name = "mudel-ai-connect-setup"
+path = "src/setup.rs"
+required-features = ["desktop"]
+
+[features]
+desktop = ["dep:eframe", "dep:rfd", "dep:sysinfo", "dep:toml_edit", "dep:sha2"]
 
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
@@ -18,9 +30,14 @@ rmcp = { version = "3.9.0", default-features = false, features = ["server", "mac
 scraper = { version = "0.29", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "time"] }
 tempfile = "3.27"
 unicode-normalization = "0.1"
+eframe = { version = "0.33.3", default-features = false, features = ["accesskit", "default_fonts", "glow"], optional = true }
+rfd = { version = "0.15", default-features = false, optional = true }
+sysinfo = { version = "0.37", default-features = false, features = ["system"], optional = true }
+toml_edit = { version = "0.25", optional = true }
+sha2 = { version = "0.10", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 base64 = "0.23"

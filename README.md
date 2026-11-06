@@ -5,8 +5,9 @@ de IA compatible con MCP. Está preparado para [SIFO de Comillas](https://sifo.c
 y utiliza los permisos de la cuenta conectada. Nada cambia en Moodle: las herramientas
 leen, y la de descarga solo guarda archivos en tu carpeta Descargas.
 
-Programa local para Windows y plugin con Python 3.11 o superior.
-Instalación: [guía del programa](local/README.md) · [guía del plugin](local/PLUGIN.md).
+Aplicación nativa para Windows y macOS en la rama `migration/rust`, con interfaz,
+instalador y plugin sin Python: [instalación y compilación](rust/README.md).
+La versión Python anterior se conserva: [programa](local/README.md) · [plugin](local/PLUGIN.md).
 
 El flujo es: **pregunta → IA + skill → MCP → Moodle → respuesta con fuentes**.
 La IA consulta los datos cuando los necesita; no carga todo el campus en cada
@@ -19,7 +20,8 @@ Moodle Pty Ltd ni a ninguna universidad. Moodle es una marca registrada de Moodl
 
 Qué sale de tu PC:
 
-- **Tu token de Moodle** solo se envía a tu Moodle. Se guarda cifrado con tu usuario de Windows
+- **Tu token de Moodle** solo se envía a tu Moodle. La versión nativa lo guarda en el Llavero
+  de macOS o cifrado con tu usuario de Windows
   (DPAPI): no sirve si alguien copia el archivo a otro equipo ni lo pueden leer otros usuarios
   del PC, pero sí un programa que se ejecute con tu usuario. El programa nunca pide ni guarda
   tu contraseña de Moodle.
@@ -28,8 +30,8 @@ Qué sale de tu PC:
 - **Lo que la IA lee de tus asignaturas** pasa por el proveedor de esa IA (Anthropic,
   OpenAI…), como cualquier conversación. Revisa la política de tu universidad antes de
   usarlo con materiales del curso.
-- **Al abrirse, el instalador consulta la lista pública de versiones en GitHub** para
-  avisarte de actualizaciones. No envía nada tuyo aparte de esa petición.
+- **Versiones y actualizaciones** abre las releases de GitHub en la versión nativa.
+  El instalador Python anterior consulta esa lista automáticamente al abrirse.
 - No hay telemetría. Si algo falla, **Copiar diagnóstico** te da un texto para pedir ayuda,
   con estados y rutas de tu equipo pero nunca tu token.
 
@@ -43,8 +45,9 @@ Funciona con Claude Desktop, Claude Code, ChatGPT Work local y Codex.
 ChatGPT Work local y Codex comparten configuración y aparecen juntos en una casilla
 del instalador. El PC debe estar encendido mientras utilizas la conexión.
 
-El núcleo está en [`shared/`](shared/moodle_mcp.py): el cliente de Moodle y las
-siete herramientas. El instalador guarda la clave cifrada en tu perfil de Windows.
+El núcleo nativo está en [`rust/`](rust/README.md); [`shared/`](shared/moodle_mcp.py)
+conserva el servidor Python para comprobar la compatibilidad de las siete herramientas.
+El instalador guarda la clave en el almacén seguro del sistema.
 Su botón **Permisos** permite elegir si la IA puede consultar asignaturas,
 materiales, tareas y calendario, y si puede descargar archivos; el MCP bloquea lo
 que esté desactivado.
@@ -53,6 +56,7 @@ que esté desactivado.
 MCP-MOODLE/
 ├── shared/    núcleo MCP: moodle_mcp.py, logo y dependencias
 ├── local/     instalador, plugin, skills y empaquetado
+├── rust/      aplicación nativa, instalador y plugin para Windows/macOS
 ├── run_tests.py
 └── dist/      paquetes generados (no se versionan)
 ```
@@ -126,8 +130,9 @@ python -m venv .venv
 y respuestas simuladas de Moodle. `local/requirements.txt` incluye las dependencias
 del núcleo MCP.
 
-GitHub Actions ejecuta las pruebas en Windows con Python 3.11 y comprueba que se
-pueda generar el paquete del plugin en cada push y pull request.
+GitHub Actions comprueba Python y los paquetes nativos de Windows, Mac Intel y
+Mac Apple Silicon en cada push y pull request. Las pruebas Rust y la generación
+de paquetes se explican en [rust/README.md](rust/README.md).
 
 ## Publicación y licencia
 

@@ -1,7 +1,9 @@
-# Migración del servidor a Rust
+# Mudel AI Connect nativo
 
-Servidor experimental en `migration/rust`. El programa y el plugin distribuidos
-siguen usando Python; esta carpeta no cambia las instalaciones existentes.
+Aplicación Rust para Windows y macOS, en `migration/rust`: servidor MCP, lanzador
+del plugin, ventana e instalador. Los paquetes nativos no necesitan Python.
+La implementación Python se conserva como referencia y para comprobar compatibilidad.
+Los paquetes siguen siendo experimentales hasta probarlos con un campus real.
 
 Ya están portadas las siete herramientas `moodle_status`, `list_courses`,
 `get_course_context`, `list_assignments`, `get_upcoming_events`, `read_course_file`
@@ -11,9 +13,79 @@ Conservan los nombres, los parámetros y los resultados estructurados de Python.
 Una misma muestra de Moodle y sus resultados de referencia comprueban ambos servidores.
 La lectura PDF usa un extractor distinto: el espaciado del texto puede variar.
 
+## Instalar y usar
+
+Los paquetes están en `dist/native/<sistema-arquitectura>/`, o en los artefactos
+`mudel-native-*` del workflow Tests de GitHub Actions:
+
+- Windows x64: abre `Mudel-AI-Connect-Setup.exe`.
+- Mac Intel o Apple Silicon: extrae el ZIP de tu arquitectura y abre
+  `Mudel AI Connect.app`. Conserva la app para editar permisos o desinstalar después.
+  Puedes moverla a tu carpeta de Aplicaciones antes de abrirla.
+- El ZIP `mudel-ai-connect-plugin-native-*` contiene el plugin para esa misma plataforma.
+  Su README explica la configuración con el lanzador nativo y la cuenta separada.
+
+En la ventana, introduce el campus y el token, marca los clientes y pulsa **Instalar**.
+El token se oculta. Si dejas el campo vacío, solo se reutiliza una cuenta guardada
+por el programa para ese mismo campus. Cierra las aplicaciones de IA cuando se
+solicite y abre una sesión nueva al terminar.
+
+El instalador comprueba Moodle antes de tocar la instalación y vuelve a comprobar
+el servidor instalado con la cuenta guardada. Conserva otros servidores y ajustes
+de los clientes; crea copias privadas de sus configuraciones. Si falla, restaura
+el servidor, las configuraciones y los bytes originales de las credenciales.
+Si un bloqueo impide restaurar o limpiar algo, indica dónde quedaron las copias.
+No cierra ni mata aplicaciones automáticamente.
+
+Detecta Claude Desktop (incluidas las carpetas nuevas de Windows), Claude Code y
+ChatGPT Work local / Codex. En Mac, Claude Desktop usa `~/Library/Application Support/Claude`.
+El botón **Permisos** edita las cinco categorías y permite elegir la carpeta de
+descargas con el diálogo del sistema. **Copiar diagnóstico** no incluye la clave.
+**Versiones y actualizaciones** abre la lista de releases; no hay consulta automática.
+
+**Desinstalar** quita el servidor, las entradas de los clientes y el token del programa.
+Conserva la cuenta del plugin y las preferencias. Migra las entradas y el servidor
+del nombre anterior `moodle-ai-connect`, conservando su entorno Python y su cuenta
+del plugin. El token no se anula en Moodle al borrarlo del equipo.
+
+No se requieren privilegios de administrador. Los paquetes de desarrollo no tienen
+firma de desarrollador de Windows ni notarización de Apple; la app Mac usa firma local.
+Las compilaciones de Mac se dirigen a macOS 11 o superior y se comprueban en CI
+con equipos Intel y Apple Silicon; falta validar versiones antiguas de macOS.
+
+## Generar el instalador y el plugin
+
+Con Rust y PowerShell 7 (`pwsh`, también en Mac), desde la raíz:
+
+```powershell
+./rust/scripts/package.ps1
+```
+
+En este equipo Windows sin Visual C++ Build Tools:
+
+```powershell
+$env:RUSTFLAGS = '-C link-self-contained=yes -C linker=rust-lld'
+./rust/scripts/package.ps1 -Toolchain stable-x86_64-pc-windows-gnu
+```
+
+El script compila primero el servidor y después lo incluye en el instalador.
+Comprueba que el servidor incluido funciona y coincide con el del plugin. Los ZIP
+se generan con una lista de archivos públicos; no incluyen entornos ni credenciales.
+Cada plataforma recibe su instalador, plugin, licencia, guía y `SHA256SUMS.txt`.
+El instalador incluye la licencia MIT del proyecto dentro del servidor instalado.
+Las dependencias conservan sus propias licencias.
+
+Para verificar los paquetes ya generados:
+
+```text
+python rust/tests/test_package.py
+```
+
+Python se usa aquí para las pruebas de desarrollo, no para ejecutar la aplicación.
+
 ## Compilar y comprobar
 
-Se necesita Rust 1.88 o superior y las herramientas de compilación de la plataforma.
+Se necesita Rust 1.89 o superior y las herramientas de compilación de la plataforma.
 En Windows, la cadena MSVC necesita Visual C++ Build Tools. En este equipo se usa
 la cadena GNU con el enlazador incluido en Rust, sin cambiar la cadena predeterminada:
 
@@ -30,6 +102,7 @@ Desde la raíz del repositorio:
 ```text
 cargo build --manifest-path rust/Cargo.toml --locked
 cargo test --manifest-path rust/Cargo.toml --locked
+cargo test --manifest-path rust/Cargo.toml --locked --features desktop
 ```
 
 El binario queda en `rust/target/debug/mudel-ai-connect-server` (`.exe` en Windows).
@@ -46,7 +119,7 @@ de las herramientas y la conexión MCP de un cliente Python al proceso Rust:
 
 En macOS usa `.venv/bin/python rust/tests/test_contract.py`.
 Las pruebas usan datos ficticios y servidores HTTP locales; no consultan un campus real.
-GitHub Actions tiene un trabajo Rust para Windows y macOS.
+GitHub Actions prueba Rust en Windows, Mac Intel y Mac Apple Silicon y guarda sus paquetes.
 
 ## Cuenta y permisos
 
@@ -63,6 +136,12 @@ El servidor puede usar una cuenta guardada sin Python:
 - Si no hay cuenta nativa, admite el `credentials.json` existente de Python.
   Solo lo lee; no lo elimina ni modifica. Un almacén nativo corrupto o inaccesible
   produce un error, sin cambiar a otra cuenta.
+
+El lanzador del plugin añade `--plugin`: usa `credentials.json` con DPAPI en Windows
+y la entrada `plugin` del Llavero en Mac. Puede leer la cuenta previa de Python.
+La cuenta `moodle` del instalador permanece separada. Para configurar o comprobar
+el plugin, añade `--plugin` a `--setup` o `--check`. Sus manifiestos ya lo incluyen
+en el arranque MCP; no crean entornos ni instalan dependencias.
 
 Para configurar la cuenta, ejecuta el binario en un terminal:
 
@@ -128,9 +207,10 @@ se marcan con `Zone.Identifier` en Windows y `com.apple.quarantine` en macOS.
 Si el sistema de archivos no permite esa marca, el resultado incluye un aviso.
 La herramienta no abre ni ejecuta los archivos descargados.
 
-## Lo que falta antes de sustituir Python
+## Validación antes de publicar
 
-- Migrar el lanzador, el instalador y la interfaz; actualizar manifiestos y empaquetado.
-- Validar en equipos Windows y Mac y con Moodle real antes de distribuir esta versión.
+- Probar la instalación completa y una consulta real desde cada cliente en equipos Windows y Mac.
+- Firmar los paquetes de distribución y notarizar la app de macOS.
 
-Esta etapa no es todavía un reemplazo del servidor de producción.
+No se ha publicado una release nativa ni se han cambiado las configuraciones reales
+de los clientes durante las pruebas de desarrollo.

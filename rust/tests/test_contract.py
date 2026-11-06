@@ -99,6 +99,17 @@ class CredentialTests(unittest.TestCase):
                 self.assertNotIn(b"NeverSaveThis123", result.stdout + result.stderr)
 
             saved.write_text("corrupt", encoding="utf-8")
+            installed_before = saved.read_bytes()
+            result = subprocess.run([str(BINARY), "--setup", "--plugin"], env=env,
+                input=f"{url}\nPluginSecret123\n".encode(), capture_output=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8"))
+            self.assertEqual(saved.read_bytes(), installed_before)
+            self.assertEqual(runtime.read_protected_credentials(plugin),
+                             {"MOODLE_URL": url, "MOODLE_TOKEN": "PluginSecret123"})
+            result = subprocess.run([str(BINARY), "--check", "--plugin"], env=env,
+                                    capture_output=True, timeout=15)
+            self.assertIn("No se pudo consultar Moodle", result.stderr.decode("utf-8"))
+            self.assertNotIn(b"PluginSecret123", result.stdout + result.stderr)
             result = subprocess.run([str(BINARY), "--check"], env=env, capture_output=True, timeout=15)
             self.assertIn("cuenta guardada", result.stderr.decode("utf-8"))
             result = subprocess.run([str(BINARY), "--check"], env={**env,

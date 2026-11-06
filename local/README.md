@@ -1,5 +1,8 @@
 # Mudel AI Connect — app local
 
+Esta guía describe la versión Python anterior. La aplicación y los paquetes
+nativos de Windows y macOS están en la [guía Rust](../rust/README.md).
+
 El MCP se ejecuta en tu PC y consulta Moodle directamente. La clave de Moodle
 se guarda en tu perfil de usuario y solo se envía a tu Moodle. Lo que la IA lea de
 tus apuntes sí pasa por su proveedor, como en cualquier conversación.

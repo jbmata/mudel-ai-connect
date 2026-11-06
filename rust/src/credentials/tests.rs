@@ -47,7 +47,7 @@ fn dpapi_roundtrip_replaces_installer_account_and_preserves_plugin() {
     std::fs::write(&plugin, b"plugin account stays unchanged").unwrap();
     for token in ["secret123", "replacement456"] {
         let account = Credentials::new("https://campus.example", token).unwrap();
-        save_windows(directory.path(), &account).unwrap();
+        save_windows(directory.path(), Kind::Installed, &account).unwrap();
         let bytes = std::fs::read(directory.path().join("credentials.dpapi.json")).unwrap();
         assert!(!String::from_utf8_lossy(&bytes).contains(token));
         let saved = read_saved(directory.path()).unwrap().unwrap();
@@ -60,7 +60,7 @@ fn dpapi_roundtrip_replaces_installer_account_and_preserves_plugin() {
     }
     let oversized =
         Credentials::new("https://campus.example", &"a".repeat(MAX_CONFIG as usize)).unwrap();
-    assert!(save_windows(directory.path(), &oversized).is_err());
+    assert!(save_windows(directory.path(), Kind::Installed, &oversized).is_err());
     assert_eq!(
         read_saved(directory.path()).unwrap().unwrap().token,
         "replacement456"

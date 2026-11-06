@@ -102,9 +102,19 @@ fn require_permission(path: &Path, permission: &str) -> Result<(), String> {
 
 impl MoodleServer {
     pub fn from_env() -> Self {
-        Self {
-            client: credentials::load()
+        Self::from_account(credentials::Kind::Installed)
+    }
+
+    pub fn from_account(kind: credentials::Kind) -> Self {
+        Self::with_client(
+            credentials::load(kind)
                 .and_then(|account| MoodleClient::new(&account.url, &account.token)),
+        )
+    }
+
+    pub fn with_client(client: Result<MoodleClient, String>) -> Self {
+        Self {
+            client,
             permissions_path: permissions_path(),
             download_folder: files::default_download_folder(),
             tool_router: Self::tool_router(),
@@ -134,28 +144,7 @@ impl MoodleServer {
     }
 
     pub async fn status(&self) -> Result<Value, String> {
-        let client = self.client(None)?;
-        let info = client.call(FUNCTIONS[0], &[]).await?;
-        if !info.is_object() {
-            return Err(FORMAT_ERROR.into());
-        }
-        let mut available: Vec<_> = optional_array(&info, "functions")?
-            .iter()
-            .filter_map(|entry| entry["name"].as_str())
-            .filter(|name| FUNCTIONS.contains(name))
-            .collect();
-        available.sort_unstable();
-        available.dedup();
-        let mut missing: Vec<_> = FUNCTIONS
-            .iter()
-            .filter(|name| !available.contains(name))
-            .collect();
-        missing.sort_unstable();
-        Ok(client.clean(json!({
-            "site": info["sitename"], "url": client.base_url, "user": info["fullname"],
-            "user_id": info["userid"], "available_functions": available, "missing_functions": missing,
-            "file_download_enabled": info["downloadfiles"]
-        })))
+        self.client(None)?.status().await
     }
 
     async fn courses(&self) -> Result<Value, String> {

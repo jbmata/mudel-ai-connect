@@ -3,7 +3,7 @@ use std::{io::Write, sync::LazyLock, time::Duration};
 use regex::Regex;
 use reqwest::{Client, Url, redirect::Policy};
 use scraper::Html;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 pub const FUNCTIONS: [&str; 5] = [
     "core_webservice_get_site_info",
@@ -25,6 +25,30 @@ pub struct MoodleClient {
 }
 
 impl MoodleClient {
+    pub async fn status(&self) -> Result<Value, String> {
+        let info = self.call(FUNCTIONS[0], &[]).await?;
+        if !info.is_object() {
+            return Err(FORMAT_ERROR.into());
+        }
+        let mut available: Vec<_> = optional_array(&info, "functions")?
+            .iter()
+            .filter_map(|entry| entry["name"].as_str())
+            .filter(|name| FUNCTIONS.contains(name))
+            .collect();
+        available.sort_unstable();
+        available.dedup();
+        let mut missing: Vec<_> = FUNCTIONS
+            .iter()
+            .filter(|name| !available.contains(name))
+            .collect();
+        missing.sort_unstable();
+        Ok(self.clean(json!({
+            "site": info["sitename"], "url": self.base_url, "user": info["fullname"],
+            "user_id": info["userid"], "available_functions": available, "missing_functions": missing,
+            "file_download_enabled": info["downloadfiles"]
+        })))
+    }
+
     pub fn new(url: &str, token: &str) -> Result<Self, String> {
         let (base_url, token) = validate_account(url, token)?;
         let http = Client::builder()

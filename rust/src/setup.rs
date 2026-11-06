@@ -1,0 +1,421 @@
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
+use std::{
+    path::PathBuf,
+    sync::mpsc::{self, Receiver},
+    time::Duration,
+};
+
+use eframe::egui::{self, Color32, RichText};
+use mudel_ai_connect_server::{
+    credentials::{self, Kind},
+    files,
+    installer::{self, Client, Paths},
+};
+
+const PINK: Color32 = Color32::from_rgb(249, 1, 124);
+const INK: Color32 = Color32::from_rgb(25, 26, 30);
+const LOGO: &[u8] = include_bytes!("../../local/assets/logo-setup.png");
+
+enum Event {
+    Progress(String),
+    Done(Result<String, String>),
+}
+
+struct Row {
+    client: Client,
+    selected: bool,
+    state: String,
+}
+
+struct Setup {
+    paths: Paths,
+    url: String,
+    token: String,
+    saved_account: bool,
+    rows: Vec<Row>,
+    allowed: [bool; 5],
+    folder: Option<PathBuf>,
+    preferences: bool,
+    confirm_remove: bool,
+    message: String,
+    error: bool,
+    task: Option<Receiver<Event>>,
+    logo: Option<egui::TextureHandle>,
+}
+
+impl Setup {
+    fn new(paths: Paths, ctx: &egui::Context) -> Self {
+        let logo = eframe::icon_data::from_png_bytes(LOGO).ok().map(|icon| {
+            ctx.load_texture(
+                "mudel-logo",
+                egui::ColorImage::from_rgba_unmultiplied(
+                    [icon.width as usize, icon.height as usize],
+                    &icon.rgba,
+                ),
+                egui::TextureOptions::LINEAR,
+            )
+        });
+        let mut setup = Self {
+            paths,
+            url: "https://sifo.comillas.edu".into(),
+            token: String::new(),
+            saved_account: false,
+            rows: Vec::new(),
+            allowed: [true; 5],
+            folder: None,
+            preferences: false,
+            confirm_remove: false,
+            message: String::new(),
+            error: false,
+            task: None,
+            logo,
+        };
+        match credentials::read(&setup.paths.data, Kind::Installed) {
+            Ok(Some(account)) => {
+                setup.url = account.url;
+                setup.saved_account = true;
+            }
+            Ok(None) => (),
+            Err(error) => setup.fail(error),
+        }
+        setup.refresh();
+        setup
+    }
+
+    fn refresh(&mut self) {
+        let previous: std::collections::HashMap<_, _> = self
+            .rows
+            .iter()
+            .map(|row| (row.client.key.clone(), row.selected))
+            .collect();
+        self.rows = self
+            .paths
+            .clients()
+            .into_iter()
+            .map(|client| Row {
+                selected: previous
+                    .get(&client.key)
+                    .copied()
+                    .unwrap_or(client.selected),
+                state: self.paths.state(&client).into(),
+                client,
+            })
+            .collect();
+    }
+
+    fn fail(&mut self, error: String) {
+        self.message = error;
+        self.error = true;
+    }
+
+    fn start(
+        &mut self,
+        ctx: &egui::Context,
+        work: impl FnOnce(mpsc::Sender<Event>) -> Result<String, String> + Send + 'static,
+    ) {
+        self.message = "Preparando…".into();
+        self.error = false;
+        let (sender, receiver) = mpsc::channel();
+        self.task = Some(receiver);
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            let result =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| work(sender.clone())))
+                    .unwrap_or_else(|_| {
+                        Err(
+                    "La operación se interrumpió. Reabre el instalador y revisa el diagnóstico."
+                        .into(),
+                )
+                    });
+            let _ = sender.send(Event::Done(result));
+            ctx.request_repaint();
+        });
+    }
+
+    fn install(&mut self, ctx: &egui::Context) {
+        let clients: Vec<_> = self
+            .rows
+            .iter()
+            .filter(|row| row.selected)
+            .map(|row| row.client.clone())
+            .collect();
+        if clients.is_empty() {
+            self.fail("Marca al menos una aplicación.".into());
+            return;
+        }
+        let paths = self.paths.clone();
+        let url = self.url.clone();
+        let token = std::mem::take(&mut self.token);
+        self.start(ctx, move |sender| {
+            let account = installer::resolve_account(&paths, &url, &token)?;
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|_| "No se pudo iniciar la comprobación de conexión.")?;
+            runtime.block_on(installer::install(&paths, &account, &clients, |text| {
+                let _ = sender.send(Event::Progress(text.into()));
+            }))
+        });
+    }
+
+    fn poll(&mut self, ctx: &egui::Context) {
+        if let Some(receiver) = &self.task {
+            let events: Vec<_> = receiver.try_iter().collect();
+            for event in events {
+                match event {
+                    Event::Progress(message) => self.message = message,
+                    Event::Done(result) => {
+                        self.task = None;
+                        self.error = result.is_err();
+                        self.message = result.unwrap_or_else(|error| error);
+                        self.refresh();
+                        self.saved_account = credentials::read(&self.paths.data, Kind::Installed)
+                            .is_ok_and(|account| account.is_some());
+                    }
+                }
+            }
+            ctx.request_repaint_after(Duration::from_millis(100));
+        }
+    }
+
+    fn show(&mut self, ctx: &egui::Context) {
+        self.poll(ctx);
+        let busy = self.task.is_some();
+        if busy && ctx.input(|input| input.viewport().close_requested()) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+        }
+        egui::CentralPanel::default().show(ctx, |ui| {
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                ui.add_space(14.0);
+                ui.horizontal(|ui| {
+                    if let Some(logo) = &self.logo { ui.image((logo.id(), egui::vec2(72.0, 72.0))); }
+                    ui.vertical(|ui| {
+                        ui.heading(RichText::new("Mudel AI Connect").size(27.0).color(INK));
+                        ui.label("Conecta tus asignaturas con tu IA.");
+                    });
+                });
+                ui.add_space(20.0);
+                ui.add_enabled_ui(!busy && !self.confirm_remove, |ui| {
+                    let label = ui.label(RichText::new("DIRECCIÓN DE MOODLE").strong());
+                    ui.add(egui::TextEdit::singleline(&mut self.url).desired_width(f32::INFINITY)).labelled_by(label.id);
+                    ui.add_space(12.0);
+                    let label = ui.label(RichText::new("TOKEN DE SERVICIOS WEB").strong());
+                    ui.add(egui::TextEdit::singleline(&mut self.token).password(true).desired_width(f32::INFINITY)
+                        .hint_text("Vacío: conservar la cuenta guardada para este campus")).labelled_by(label.id);
+                    egui::CollapsingHeader::new("Cómo obtener el token").show(ui, |ui| {
+                        ui.label("En Moodle: tu foto o nombre → Preferencias → Cuenta de usuario → Claves de seguridad. Copia el token de Servicios web, no el de RSS.");
+                        ui.label("Si no aparece, pídelo al soporte del centro. Nunca introduzcas tu contraseña de Moodle aquí ni el token en un chat.");
+                    });
+                    ui.add_space(14.0);
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("CONECTAR CON").strong());
+                        if ui.small_button("Actualizar lista").clicked() { self.refresh(); }
+                    });
+                    if self.rows.is_empty() {
+                        ui.label("Abre una vez Claude Desktop, Claude Code o Codex y actualiza la lista.");
+                    }
+                    for row in &mut self.rows {
+                        ui.horizontal(|ui| {
+                            ui.checkbox(&mut row.selected, &row.client.name);
+                            ui.label(RichText::new(&row.state).small().color(if row.state == "Actualizar" { PINK } else { Color32::GRAY }));
+                        });
+                        if !row.client.selected && row.client.key == "codex" { ui.small("Ya tiene el plugin; no necesita otra conexión."); }
+                    }
+                    ui.add_space(14.0);
+                    ui.label("El token se guarda en el almacén seguro del sistema y solo se envía a tu Moodle.");
+                    ui.add_space(12.0);
+                    ui.horizontal_wrapped(|ui| {
+                        let installed = self.paths.installed() || self.saved_account;
+                        let title = if installed { "Actualizar / reparar" } else { "Instalar" };
+                        if ui.add(egui::Button::new(RichText::new(title).color(Color32::WHITE)).fill(INK)).clicked() { self.install(ctx); }
+                        if ui.button("Permisos").clicked() {
+                            self.allowed = match installer::read_permissions(&self.paths) {
+                                Ok(values) => values,
+                                Err(error) => { self.fail(error); [false; 5] }
+                            };
+                            match installer::download_folder(&self.paths) {
+                                Ok(folder) => self.folder = folder,
+                                Err(error) => { self.folder = None; self.fail(error); }
+                            }
+                            self.preferences = true;
+                        }
+                        if ui.add_enabled(installed, egui::Button::new("Desinstalar")).clicked() { self.confirm_remove = true; }
+                    });
+                });
+                ui.add_space(16.0);
+                if busy { ui.horizontal(|ui| { ui.spinner(); ui.label("Espera a que termine antes de cerrar la ventana."); }); }
+                if !self.message.is_empty() {
+                    egui::Frame::group(ui.style()).inner_margin(12.0).show(ui, |ui| {
+                        ui.colored_label(if self.error { PINK } else { INK }, &self.message);
+                    });
+                }
+                ui.add_space(20.0);
+                ui.separator();
+                ui.small(format!("v{} · Rust · No oficial: sin relación con Moodle ni tu universidad", env!("CARGO_PKG_VERSION")));
+                if ui.add_enabled(!busy, egui::Button::new("Copiar diagnóstico").small()).clicked() {
+                    ctx.copy_text(installer::diagnostics(&self.paths));
+                    self.message = "Diagnóstico copiado: no contiene el token.".into(); self.error = false;
+                }
+                ui.hyperlink_to("Versiones y actualizaciones", "https://github.com/jbmata/mudel-ai-connect/releases");
+            });
+        });
+        if self.preferences {
+            self.show_preferences(ctx, busy);
+        }
+        if self.confirm_remove {
+            egui::Window::new("Desinstalar Mudel AI Connect").collapsible(false).resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0]).show(ctx, |ui| {
+                    ui.set_max_width(400.0);
+                    ui.label("Se borrarán el servidor y el token de esta instalación. Se conservarán tus permisos y la cuenta separada del plugin.");
+                    ui.label("Cierra las aplicaciones de IA antes de continuar.");
+                    ui.horizontal(|ui| {
+                        if ui.button("Desinstalar").clicked() {
+                            self.confirm_remove = false;
+                            let paths = self.paths.clone();
+                            self.start(ctx, move |_| installer::uninstall(&paths));
+                        }
+                        if ui.button("Cancelar").clicked() { self.confirm_remove = false; }
+                    });
+                });
+        }
+    }
+
+    fn show_preferences(&mut self, ctx: &egui::Context, busy: bool) {
+        let mut open = true;
+        egui::Window::new("Consultas permitidas").open(&mut open).collapsible(false).resizable(true)
+            .default_width(440.0).show(ctx, |ui| {
+                ui.add_enabled_ui(!busy, |ui| {
+                    ui.label("Elige qué puede consultar y descargar la IA en este equipo.");
+                    for (index, (_, label)) in installer::PERMISSIONS.iter().enumerate() { ui.checkbox(&mut self.allowed[index], *label); }
+                    ui.add_space(10.0);
+                    let folder = self.folder.clone().or_else(|| files::default_download_folder().ok());
+                    ui.label(format!("Descargas: {}", folder.map(|folder| folder.display().to_string()).unwrap_or_else(|| "no disponible".into())));
+                    ui.horizontal_wrapped(|ui| {
+                        if ui.button("Cambiar carpeta…").clicked() && let Some(folder) = rfd::FileDialog::new().set_title("Carpeta para las descargas").pick_folder() { self.folder = Some(folder); }
+                        if ui.button("Usar la predeterminada").clicked() { self.folder = None; }
+                    });
+                    ui.add_space(10.0);
+                    ui.label("Los permisos se aplican a las próximas consultas. El estado de conexión sigue disponible para diagnóstico.");
+                    ui.horizontal(|ui| {
+                        if ui.button("Guardar").clicked() {
+                            let paths = self.paths.clone(); let allowed = self.allowed; let folder = self.folder.clone();
+                            self.preferences = false;
+                            self.start(ctx, move |_| {
+                                installer::save_preferences(&paths, allowed, folder.as_deref())?;
+                                Ok("Permisos guardados. Se aplican a las próximas consultas.".into())
+                            });
+                        }
+                        if ui.button("Cancelar").clicked() { self.preferences = false; }
+                    });
+                });
+            });
+        self.preferences &= open;
+    }
+}
+
+impl eframe::App for Setup {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.show(ctx);
+    }
+}
+
+fn main() -> eframe::Result {
+    if std::env::args().skip(1).eq(["--package-check"]) {
+        match installer::check_package() {
+            Ok(value) => {
+                println!("{value}");
+                return Ok(());
+            }
+            Err(error) => {
+                eprintln!("{error}");
+                std::process::exit(1);
+            }
+        }
+    }
+    if std::env::args().len() != 1 {
+        eprintln!("Uso: mudel-ai-connect-setup [--package-check]");
+        std::process::exit(1);
+    }
+    let paths = match Paths::current() {
+        Ok(paths) => paths,
+        Err(error) => {
+            rfd::MessageDialog::new()
+                .set_title("Mudel AI Connect")
+                .set_description(&error)
+                .set_level(rfd::MessageLevel::Error)
+                .show();
+            return Ok(());
+        }
+    };
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_inner_size([600.0, 680.0])
+        .with_min_inner_size([440.0, 480.0]);
+    if let Ok(icon) = eframe::icon_data::from_png_bytes(LOGO) {
+        viewport = viewport.with_icon(icon);
+    }
+    eframe::run_native(
+        "Mudel AI Connect",
+        eframe::NativeOptions {
+            viewport,
+            centered: true,
+            ..Default::default()
+        },
+        Box::new(move |cc| {
+            let mut visuals = egui::Visuals::light();
+            visuals.selection.bg_fill = PINK;
+            visuals.hyperlink_color = PINK;
+            visuals.panel_fill = Color32::WHITE;
+            cc.egui_ctx.set_visuals(visuals);
+            cc.egui_ctx.style_mut(|style| {
+                style.spacing.item_spacing = egui::vec2(10.0, 8.0);
+                style.spacing.button_padding = egui::vec2(14.0, 8.0);
+            });
+            Ok(Box::new(Setup::new(paths, &cc.egui_ctx)))
+        }),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn window_and_preferences_render_without_a_display_or_real_credentials() {
+        let temporary = tempfile::tempdir().unwrap();
+        let paths = Paths {
+            home: temporary.path().into(),
+            data: temporary.path().join("data"),
+            local: temporary.path().join("local"),
+            roaming: temporary.path().join("roaming"),
+            macos: false,
+        };
+        let ctx = egui::Context::default();
+        // Evita consultar el Llavero real al probar la vista.
+        let mut setup = Setup {
+            paths,
+            url: "https://campus.example".into(),
+            token: "fake123".into(),
+            saved_account: false,
+            rows: vec![],
+            allowed: [true; 5],
+            folder: None,
+            preferences: true,
+            confirm_remove: true,
+            message: "Prueba".into(),
+            error: false,
+            task: None,
+            logo: None,
+        };
+        for size in [[440.0, 480.0], [600.0, 780.0]] {
+            let output = ctx.run(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size.into())),
+                    ..Default::default()
+                },
+                |ctx| setup.show(ctx),
+            );
+            assert!(!output.shapes.is_empty());
+        }
+    }
+}
