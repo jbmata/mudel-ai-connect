@@ -26,25 +26,7 @@ pub struct MoodleClient {
 
 impl MoodleClient {
     pub fn new(url: &str, token: &str) -> Result<Self, String> {
-        let base_url = url.trim().trim_end_matches('/');
-        let parsed =
-            Url::parse(base_url).map_err(|_| "MOODLE_URL debe ser una URL HTTPS del campus.")?;
-        if parsed.scheme() != "https"
-            || parsed.host_str().is_none()
-            || !parsed.username().is_empty()
-            || parsed.password().is_some()
-            || parsed.query().is_some()
-            || parsed.fragment().is_some()
-        {
-            return Err("MOODLE_URL debe ser HTTPS, sin credenciales ni parámetros.".into());
-        }
-        let token = token.trim();
-        if token.is_empty() || !token.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
-            return Err(
-                "Falta MOODLE_TOKEN válido. Es una clave de servicios web, no tu contraseña."
-                    .into(),
-            );
-        }
+        let (base_url, token) = validate_account(url, token)?;
         let http = Client::builder()
             .timeout(Duration::from_secs(30))
             .redirect(Policy::none())
@@ -281,6 +263,27 @@ impl MoodleClient {
             value => value,
         }
     }
+}
+
+pub fn validate_account<'a>(url: &'a str, token: &'a str) -> Result<(&'a str, &'a str), String> {
+    let url = url.trim().trim_end_matches('/');
+    let parsed = Url::parse(url).map_err(|_| "MOODLE_URL debe ser una URL HTTPS del campus.")?;
+    if parsed.scheme() != "https"
+        || parsed.host_str().is_none()
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+    {
+        return Err("MOODLE_URL debe ser HTTPS, sin credenciales ni parámetros.".into());
+    }
+    let token = token.trim();
+    if token.is_empty() || !token.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
+        return Err(
+            "Falta MOODLE_TOKEN válido. Es una clave de servicios web, no tu contraseña.".into(),
+        );
+    }
+    Ok((url, token))
 }
 
 pub fn text(html: &str) -> String {

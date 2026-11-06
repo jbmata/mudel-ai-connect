@@ -57,6 +57,59 @@ class ContractTests(unittest.TestCase):
         self.assertNotIn(b"SecretNeverEcho987", result.stderr)
 
 
+@unittest.skipUnless(sys.platform == "win32", "Interoperabilidad de DPAPI en Windows")
+class CredentialTests(unittest.TestCase):
+    def test_python_and_rust_share_encrypted_accounts_without_exposing_tokens(self):
+        import plugin_runtime as runtime
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "mudel-ai-connect"
+            env = {key: value for key, value in os.environ.items()
+                   if key not in {"MOODLE_URL", "MOODLE_TOKEN"}}
+            env["LOCALAPPDATA"] = temporary
+            token = "FakeSecretOnlyForThisTest987"
+            url = "https://127.0.0.1:1"
+            plugin = directory / "credentials.json"
+            directory.mkdir()
+            plugin.write_bytes(b"plugin unchanged")
+            for value in (token, token + "Replacement"):
+                result = subprocess.run([str(BINARY), "--setup"], env=env,
+                    input=f"{url}\n{value}\n".encode(), capture_output=True, timeout=15)
+                self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8"))
+                self.assertNotIn(value.encode(), result.stdout + result.stderr)
+                saved = directory / "credentials.dpapi.json"
+                self.assertNotIn(value.encode(), saved.read_bytes())
+                self.assertEqual(runtime.read_protected_credentials(saved),
+                                 {"MOODLE_URL": url, "MOODLE_TOKEN": value})
+                self.assertEqual(plugin.read_bytes(), b"plugin unchanged")
+
+            with patch.object(runtime, "data_dir", return_value=directory):
+                runtime.save_credentials(url, token, protect=True)
+            result = subprocess.run([str(BINARY), "--check"], env=env,
+                                    capture_output=True, timeout=15)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("No se pudo consultar Moodle", result.stderr.decode("utf-8"))
+            self.assertNotIn(token.encode(), result.stdout + result.stderr)
+
+            original = saved.read_bytes()
+            for data in (b"http://invalid.example\nNeverSaveThis123\n", b"https://campus.example\n"):
+                result = subprocess.run([str(BINARY), "--setup"], env=env,
+                                        input=data, capture_output=True, timeout=15)
+                self.assertEqual(result.returncode, 1)
+                self.assertEqual(saved.read_bytes(), original)
+                self.assertNotIn(b"NeverSaveThis123", result.stdout + result.stderr)
+
+            saved.write_text("corrupt", encoding="utf-8")
+            result = subprocess.run([str(BINARY), "--check"], env=env, capture_output=True, timeout=15)
+            self.assertIn("cuenta guardada", result.stderr.decode("utf-8"))
+            result = subprocess.run([str(BINARY), "--check"], env={**env,
+                "MOODLE_URL": "https://campus.example", "MOODLE_TOKEN": ""},
+                capture_output=True, timeout=15)
+            self.assertIn("MOODLE_TOKEN", result.stderr.decode("utf-8"))
+            result = subprocess.run([str(BINARY), "--check"], env={**env,
+                "MOODLE_URL": "https://other.example"}, capture_output=True, timeout=15)
+            self.assertIn("juntas", result.stderr.decode("utf-8"))
+
+
 class StdioTests(unittest.IsolatedAsyncioTestCase):
     async def test_real_process_discovers_tools_and_rejects_invalid_calls(self):
         with tempfile.TemporaryDirectory() as temporary:

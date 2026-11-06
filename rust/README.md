@@ -50,10 +50,44 @@ GitHub Actions tiene un trabajo Rust para Windows y macOS.
 
 ## Cuenta y permisos
 
-Esta etapa recibe **únicamente** `MOODLE_URL` y `MOODLE_TOKEN` del entorno heredado.
-No lee `.env`, no guarda claves y no descifra las credenciales del instalador.
-No pongas tokens en argumentos, archivos versionados ni conversaciones.
-Puede iniciarse y anunciar sus herramientas sin cuenta; las consultas devolverán un error.
+El servidor puede usar una cuenta guardada sin Python:
+
+- Windows: lee primero `credentials.dpapi.json` del instalador. Guarda el token con
+  [DPAPI para el usuario actual](https://learn.microsoft.com/en-us/windows/win32/api/dpapi/nf-dpapi-cryptprotectdata),
+  en el mismo formato que Python. `--setup` actualiza esta cuenta y conserva aparte
+  el archivo `credentials.json` del plugin.
+- macOS: guarda juntos la URL y el token en el Llavero, mediante la
+  [API nativa](https://docs.rs/security-framework/3.7.0/security_framework/passwords/index.html),
+  con servicio `mudel-ai-connect` y cuenta `moodle`. No crea un archivo con el token.
+  El sistema puede solicitar permiso para acceder a esa entrada.
+- Si no hay cuenta nativa, admite el `credentials.json` existente de Python.
+  Solo lo lee; no lo elimina ni modifica. Un almacén nativo corrupto o inaccesible
+  produce un error, sin cambiar a otra cuenta.
+
+Para configurar la cuenta, ejecuta el binario en un terminal:
+
+```powershell
+# Windows, desde la raíz del repositorio
+.\rust\target\debug\mudel-ai-connect-server.exe --setup
+.\rust\target\debug\mudel-ai-connect-server.exe --check
+```
+
+```sh
+# macOS
+./rust/target/debug/mudel-ai-connect-server --setup
+./rust/target/debug/mudel-ai-connect-server --check
+```
+
+`--setup` pide la URL y después el token con entrada oculta. Valida su formato y
+guarda la cuenta; `--check` comprueba después la conexión con Moodle. Para procesos
+que ya manejan secretos, también admite dos líneas por stdin: URL y token.
+No pongas tokens en argumentos, historial del shell, archivos versionados ni conversaciones.
+
+`MOODLE_URL` y `MOODLE_TOKEN` heredadas tienen prioridad sobre la cuenta guardada,
+incluso si están vacías. Deben definirse juntas; una variable aislada produce un error
+para evitar enviar el token guardado a otro campus. Elimina ambas del entorno para
+comprobar la cuenta guardada. No se leen archivos `.env`.
+Puede anunciar sus herramientas sin cuenta; las consultas devolverán un error.
 
 Lee los mismos permisos que `local/plugin_runtime.py`, en cada consulta:
 
@@ -63,8 +97,8 @@ Lee los mismos permisos que `local/plugin_runtime.py`, en cada consulta:
 
 Sin archivo se permiten las consultas, como en Python. Un archivo inválido bloquea
 las consultas; un permiso desactivado se respeta. `moodle_status` sigue disponible
-para diagnóstico. La ruta de macOS se conserva provisionalmente para compartir los
-permisos con Python, hasta migrar el almacenamiento nativo.
+para diagnóstico. La ruta de macOS se conserva para compartir los permisos y la
+carpeta de descargas con Python; el token nuevo se guarda en el Llavero.
 
 Las peticiones son POST al campus HTTPS configurado, sin seguir redirecciones ni
 usar proxies del entorno, con 30 segundos de espera y un máximo de 10 MiB por respuesta
@@ -96,7 +130,6 @@ La herramienta no abre ni ejecuta los archivos descargados.
 
 ## Lo que falta antes de sustituir Python
 
-- Conservar el acceso a las credenciales DPAPI de Windows y añadir el Llavero de macOS.
 - Migrar el lanzador, el instalador y la interfaz; actualizar manifiestos y empaquetado.
 - Validar en equipos Windows y Mac y con Moodle real antes de distribuir esta versión.
 

@@ -1,3 +1,4 @@
+mod credentials;
 mod files;
 mod moodle;
 mod server;
@@ -7,8 +8,24 @@ use server::MoodleServer;
 
 #[tokio::main]
 async fn main() -> std::process::ExitCode {
-    let server = MoodleServer::from_env();
     let args: Vec<_> = std::env::args().skip(1).collect();
+    if args == ["--setup"] {
+        return match credentials::setup() {
+            Ok(()) => {
+                println!("Cuenta guardada en el almacén seguro del sistema.");
+                std::process::ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("{error}");
+                std::process::ExitCode::FAILURE
+            }
+        };
+    }
+    if !args.is_empty() && args != ["--check"] {
+        eprintln!("Uso: mudel-ai-connect-server [--check | --setup]");
+        return std::process::ExitCode::FAILURE;
+    }
+    let server = MoodleServer::from_env();
     if args == ["--check"] {
         return match server.status().await {
             Ok(value) => {
@@ -20,10 +37,6 @@ async fn main() -> std::process::ExitCode {
                 std::process::ExitCode::FAILURE
             }
         };
-    }
-    if !args.is_empty() {
-        eprintln!("Uso: mudel-ai-connect-server [--check]");
-        return std::process::ExitCode::FAILURE;
     }
     // stdout pertenece exclusivamente a MCP; nunca escribir diagnósticos ni claves aquí.
     match server.serve(stdio()).await {

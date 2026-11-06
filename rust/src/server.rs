@@ -16,6 +16,7 @@ use rmcp::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 
+use crate::credentials;
 use crate::files::{self, CourseFile, ReadFile};
 use crate::moodle::{FORMAT_ERROR, FUNCTIONS, MoodleClient, array, id, optional_array, plain, utc};
 
@@ -63,24 +64,9 @@ fn default_section_limit() -> u8 {
 }
 
 fn permissions_path() -> Result<PathBuf, String> {
-    let home = || {
-        std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
-            .map(PathBuf::from)
-            .ok_or_else(|| PERMISSION_ERROR.to_string())
-    };
-    let parent = if cfg!(windows) {
-        std::env::var_os("LOCALAPPDATA")
-            .map(PathBuf::from)
-            .map(Ok)
-            .unwrap_or_else(|| home().map(|home| home.join("AppData/Local")))?
-    } else {
-        // shortcut: ruta compartida con Python, usar Application Support al migrar el Llavero de macOS.
-        std::env::var_os("XDG_DATA_HOME")
-            .map(PathBuf::from)
-            .map(Ok)
-            .unwrap_or_else(|| home().map(|home| home.join(".local/share")))?
-    };
-    Ok(parent.join("mudel-ai-connect/permissions.json"))
+    credentials::data_dir()
+        .map(|path| path.join("permissions.json"))
+        .map_err(|_| PERMISSION_ERROR.into())
 }
 
 fn require_permission(path: &Path, permission: &str) -> Result<(), String> {
@@ -117,11 +103,8 @@ fn require_permission(path: &Path, permission: &str) -> Result<(), String> {
 impl MoodleServer {
     pub fn from_env() -> Self {
         Self {
-            // shortcut: solo variables heredadas, añadir DPAPI/Llavero antes de sustituir el instalador Python.
-            client: MoodleClient::new(
-                &std::env::var("MOODLE_URL").unwrap_or_default(),
-                &std::env::var("MOODLE_TOKEN").unwrap_or_default(),
-            ),
+            client: credentials::load()
+                .and_then(|account| MoodleClient::new(&account.url, &account.token)),
             permissions_path: permissions_path(),
             download_folder: files::default_download_folder(),
             tool_router: Self::tool_router(),
