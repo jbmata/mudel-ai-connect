@@ -17,7 +17,8 @@ import moodle_mcp as python_server  # noqa: E402
 
 BINARY = ROOT / "rust/target/debug" / ("mudel-ai-connect-server.exe" if sys.platform == "win32" else "mudel-ai-connect-server")
 FIXTURE = json.loads((Path(__file__).parent / "fixtures/moodle.json").read_text(encoding="utf-8"))
-TOOLS = set(FIXTURE["expected"])
+CORE_TOOLS = set(FIXTURE["expected"])
+TOOLS = CORE_TOOLS | {"read_course_file", "download_course_file"}
 
 
 class ContractTests(unittest.TestCase):
@@ -27,9 +28,24 @@ class ContractTests(unittest.TestCase):
                 patch.object(python_server, "get_client", return_value=client), \
                 patch.object(python_server, "require_permission"):
             actual = {name: getattr(python_server, name)(**({"course_id": 7} if name in {
-                "get_course_context", "list_assignments"} else {})) for name in TOOLS}
+                "get_course_context", "list_assignments"} else {})) for name in CORE_TOOLS}
         actual["get_course_context"].pop("fetched_at")
         self.assertEqual(actual, FIXTURE["expected"])
+
+    def test_python_file_reads_match_the_shared_contract(self):
+        cases = json.loads((Path(__file__).parent / "fixtures/file_reads.json").read_text(encoding="utf-8"))
+        client = python_server.MoodleClient("https://campus.example/moodle", "secret123")
+        for case in cases:
+            with self.subTest(filename=case["filename"], offset=case["offset"]), \
+                    patch.object(client, "call", return_value=case["sections"]), \
+                    patch.object(client, "download", return_value=(case["body"].encode(), case["content_type"])), \
+                    patch.object(python_server, "get_client", return_value=client), \
+                    patch.object(python_server, "require_permission"):
+                self.assertEqual(python_server.read_course_file(7, 90, offset=case["offset"]), case["expected"])
+
+    def test_server_instructions_match_python(self):
+        instructions = (ROOT / "rust/src/instructions.txt").read_text(encoding="utf-8")
+        self.assertEqual(instructions, python_server.INSTRUCTIONS)
 
     def test_check_errors_are_utf8_and_do_not_echo_the_token(self):
         result = subprocess.run([str(BINARY), "--check"], env={**os.environ,
@@ -52,7 +68,7 @@ class StdioTests(unittest.IsolatedAsyncioTestCase):
                 tools = (await client.list_tools()).tools
                 self.assertEqual({tool.name for tool in tools}, TOOLS)
                 for tool in tools:
-                    self.assertTrue(tool.annotations.read_only_hint)
+                    self.assertEqual(tool.annotations.read_only_hint, tool.name != "download_course_file")
                     self.assertFalse(tool.annotations.destructive_hint)
                 missing = await client.call_tool("moodle_status")
                 self.assertTrue(missing.is_error)
@@ -62,10 +78,17 @@ class StdioTests(unittest.IsolatedAsyncioTestCase):
                     ("get_course_context", {"course_id": 7, "section_start": -1}),
                     ("get_course_context", {"course_id": 7, "section_limit": 11}),
                     ("list_assignments", {"course_id": 0}),
+                    ("read_course_file", {"course_id": 7, "module_id": -1}),
+                    ("download_course_file", {"course_id": 7, "module_id": 90, "path": "/tmp/arbitrary"}),
                 ]:
                     with self.subTest(tool=name, arguments=arguments):
                         result = await client.call_tool(name, arguments)
                         self.assertTrue(result.is_error)
+                self.assertIn("estudiar_curso", [prompt.name for prompt in (await client.list_prompts()).prompts])
+                for arguments in ({"course_id": "7"}, {"course_id": "7", "pregunta": "Explica el tema 1"}):
+                    result = await client.get_prompt("estudiar_curso", arguments)
+                    expected = python_server.estudiar_curso(**arguments)
+                    self.assertEqual(result.messages[0].content.text, expected)
 
 
 if __name__ == "__main__":

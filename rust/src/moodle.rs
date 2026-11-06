@@ -1,4 +1,4 @@
-use std::{sync::LazyLock, time::Duration};
+use std::{io::Write, sync::LazyLock, time::Duration};
 
 use regex::Regex;
 use reqwest::{Client, Url, redirect::Policy};
@@ -12,7 +12,7 @@ pub const FUNCTIONS: [&str; 5] = [
     "mod_assign_get_assignments",
     "core_calendar_get_calendar_upcoming_view",
 ];
-const MAX_BYTES: usize = 10 * 1024 * 1024;
+pub const MAX_BYTES: usize = 10 * 1024 * 1024;
 const NETWORK_ERROR: &str =
     "No se pudo consultar Moodle. Comprueba la conexión, la URL y los permisos del token.";
 pub const FORMAT_ERROR: &str = "Formato de respuesta de Moodle inesperado.";
@@ -68,10 +68,28 @@ impl MoodleClient {
             ("wsfunction", function.into()),
             ("moodlewsrestformat", "json".into()),
         ]);
+        let mut body = Vec::new();
+        self.stream(
+            &format!("{}/webservice/rest/server.php", self.base_url),
+            &form,
+            &mut body,
+            MAX_BYTES,
+        )
+        .await?;
+        self.parse_response(&body, function)
+    }
+
+    async fn stream(
+        &self,
+        url: &str,
+        form: &[(&str, String)],
+        out: &mut (impl Write + Send),
+        limit: usize,
+    ) -> Result<String, String> {
         let mut response = self
             .http
-            .post(format!("{}/webservice/rest/server.php", self.base_url))
-            .form(&form)
+            .post(url)
+            .form(form)
             .send()
             .await
             .map_err(|_| NETWORK_ERROR)?;
@@ -83,18 +101,128 @@ impl MoodleClient {
         }
         if response
             .content_length()
-            .is_some_and(|size| size > MAX_BYTES as u64)
+            .is_some_and(|size| size > limit as u64)
         {
-            return Err("La respuesta supera el límite de 10 MiB.".into());
+            return Err(format!(
+                "La respuesta supera el límite de {} MiB.",
+                limit / (1024 * 1024)
+            ));
         }
-        let mut body = Vec::new();
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let mut size = 0;
         while let Some(chunk) = response.chunk().await.map_err(|_| NETWORK_ERROR)? {
-            if chunk.len() > MAX_BYTES - body.len() {
-                return Err("La respuesta supera el límite de 10 MiB.".into());
+            if chunk.len() > limit - size {
+                return Err(format!(
+                    "La respuesta supera el límite de {} MiB.",
+                    limit / (1024 * 1024)
+                ));
             }
-            body.extend_from_slice(&chunk);
+            out.write_all(&chunk)
+                .map_err(|_| "No se pudo guardar el archivo en la carpeta de descargas.")?;
+            size += chunk.len();
         }
-        self.parse_response(&body, function)
+        Ok(content_type)
+    }
+
+    pub fn file_request_url(&self, file_url: &str) -> Result<Url, String> {
+        let invalid =
+            "Solo se admiten archivos del endpoint webservice/pluginfile.php del mismo Moodle.";
+        // Validar la ruta original antes de que Url normalice segmentos como %2e%2e y barras inversas.
+        if file_url.contains('\\') || file_url.chars().any(char::is_control) {
+            return Err(invalid.into());
+        }
+        let raw_path = file_url
+            .split_once("://")
+            .ok_or(invalid)?
+            .1
+            .split_once('/')
+            .map(|(_, rest)| format!("/{}", rest.split(['?', '#']).next().unwrap_or("")))
+            .ok_or(invalid)?;
+        let decoded = percent_encoding::percent_decode_str(&raw_path)
+            .decode_utf8()
+            .map_err(|_| invalid)?;
+        if decoded.contains('\\')
+            || decoded.chars().any(char::is_control)
+            || decoded.split('/').any(|part| matches!(part, "." | ".."))
+        {
+            return Err(invalid.into());
+        }
+        let base = Url::parse(&self.base_url).map_err(|_| invalid)?;
+        let mut url = Url::parse(file_url).map_err(|_| invalid)?;
+        if url.origin() != base.origin() || !url.username().is_empty() || url.password().is_some() {
+            return Err("El archivo no pertenece al mismo servidor Moodle.".into());
+        }
+        let endpoint = format!(
+            "{}/webservice/pluginfile.php",
+            base.path().trim_end_matches('/')
+        );
+        let query: Vec<_> = url
+            .query_pairs()
+            .filter(|(key, _)| !["token", "wstoken"].contains(&key.to_ascii_lowercase().as_str()))
+            .map(|(key, value)| (key.into_owned(), value.into_owned()))
+            .collect();
+        if !(url.path().starts_with(&(endpoint.clone() + "/"))
+            || (url.path() == endpoint
+                && query
+                    .iter()
+                    .any(|(key, value)| key == "file" && value.starts_with('/'))))
+        {
+            return Err(invalid.into());
+        }
+        url.set_fragment(None);
+        url.set_query(None);
+        if !query.is_empty() {
+            url.query_pairs_mut().extend_pairs(query);
+        }
+        Ok(url)
+    }
+
+    pub async fn save(
+        &self,
+        file_url: &str,
+        out: &mut (impl Write + Send),
+        limit: usize,
+    ) -> Result<String, String> {
+        let url = self.file_request_url(file_url)?;
+        self.stream(url.as_str(), &[("token", self.token.clone())], out, limit)
+            .await
+    }
+
+    pub async fn course_file(
+        &self,
+        course_id: i64,
+        module_id: i64,
+        file_index: u64,
+    ) -> Result<(Value, Value), String> {
+        if course_id <= 0 || module_id <= 0 {
+            return Err("course_id y module_id deben ser positivos.".into());
+        }
+        let sections = self
+            .call(FUNCTIONS[2], &[("courseid", course_id.to_string())])
+            .await?;
+        for section in array(&sections)? {
+            for module in optional_array(section, "modules")? {
+                if module["id"].as_i64() != Some(module_id) {
+                    continue;
+                }
+                let item = usize::try_from(file_index)
+                    .ok()
+                    .and_then(|index| module["contents"].as_array()?.get(index))
+                    .ok_or(
+                        "No se encontró ese módulo o índice de archivo en el curso accesible.",
+                    )?;
+                if item["type"] != "file" || item["fileurl"].as_str().is_none_or(str::is_empty) {
+                    return Err("Ese contenido no es un archivo descargable de Moodle.".into());
+                }
+                return Ok((module.clone(), item.clone()));
+            }
+        }
+        Err("No se encontró ese módulo o índice de archivo en el curso accesible.".into())
     }
 
     fn parse_response(&self, body: &[u8], function: &str) -> Result<Value, String> {

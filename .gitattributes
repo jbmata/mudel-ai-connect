@@ -1,0 +1,2 @@
+rust/src/instructions.txt text eol=lf
+rust/tests/fixtures/*.pdf binary

@@ -1,0 +1,142 @@
+[
+  {
+    "filename": "apuntes.txt",
+    "body": "﻿Apuntes á🙂\nSegunda línea",
+    "content_type": "text/plain",
+    "offset": 0,
+    "sections": [
+      {
+        "id": 1,
+        "name": "Tema",
+        "modules": [
+          {
+            "id": 90,
+            "url": "https://campus.example/moodle/mod/resource/view.php?id=90",
+            "contents": [
+              {
+                "type": "file",
+                "filename": "apuntes.txt",
+                "fileurl": "https://campus.example/moodle/webservice/pluginfile.php/42/content/apuntes.txt?token=old",
+                "filesize": 32
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "expected": {
+      "filename": "apuntes.txt",
+      "source_url": "https://campus.example/moodle/webservice/pluginfile.php/42/content/apuntes.txt?token=[REDACTED]",
+      "module_url": "https://campus.example/moodle/mod/resource/view.php?id=90",
+      "text": "Apuntes á🙂\nSegunda línea",
+      "total_characters": 24,
+      "offset": 0,
+      "next_offset": null
+    }
+  },
+  {
+    "filename": "apuntes.txt",
+    "body": "﻿Apuntes á🙂\nSegunda línea",
+    "content_type": "text/plain",
+    "offset": 8,
+    "sections": [
+      {
+        "id": 1,
+        "name": "Tema",
+        "modules": [
+          {
+            "id": 90,
+            "url": "https://campus.example/moodle/mod/resource/view.php?id=90",
+            "contents": [
+              {
+                "type": "file",
+                "filename": "apuntes.txt",
+                "fileurl": "https://campus.example/moodle/webservice/pluginfile.php/42/content/apuntes.txt?token=old",
+                "filesize": 32
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "expected": {
+      "filename": "apuntes.txt",
+      "source_url": "https://campus.example/moodle/webservice/pluginfile.php/42/content/apuntes.txt?token=[REDACTED]",
+      "module_url": "https://campus.example/moodle/mod/resource/view.php?id=90",
+      "text": "á🙂\nSegunda línea",
+      "total_characters": 24,
+      "offset": 8,
+      "next_offset": null
+    }
+  },
+  {
+    "filename": "apuntes.txt",
+    "body": "﻿Apuntes á🙂\nSegunda línea",
+    "content_type": "text/plain",
+    "offset": 50000,
+    "sections": [
+      {
+        "id": 1,
+        "name": "Tema",
+        "modules": [
+          {
+            "id": 90,
+            "url": "https://campus.example/moodle/mod/resource/view.php?id=90",
+            "contents": [
+              {
+                "type": "file",
+                "filename": "apuntes.txt",
+                "fileurl": "https://campus.example/moodle/webservice/pluginfile.php/42/content/apuntes.txt?token=old",
+                "filesize": 32
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "expected": {
+      "filename": "apuntes.txt",
+      "source_url": "https://campus.example/moodle/webservice/pluginfile.php/42/content/apuntes.txt?token=[REDACTED]",
+      "module_url": "https://campus.example/moodle/mod/resource/view.php?id=90",
+      "text": "",
+      "total_characters": 24,
+      "offset": 50000,
+      "next_offset": null
+    }
+  },
+  {
+    "filename": "pagina.html",
+    "body": "<p>Uno &amp; dos</p><script>oculto()</script><p>Tres</p>",
+    "content_type": "text/html",
+    "offset": 0,
+    "sections": [
+      {
+        "id": 1,
+        "name": "Tema",
+        "modules": [
+          {
+            "id": 90,
+            "url": "https://campus.example/moodle/mod/resource/view.php?id=90",
+            "contents": [
+              {
+                "type": "file",
+                "filename": "pagina.html",
+                "fileurl": "https://campus.example/moodle/webservice/pluginfile.php/42/content/pagina.html?token=old",
+                "filesize": 56
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "expected": {
+      "filename": "pagina.html",
+      "source_url": "https://campus.example/moodle/webservice/pluginfile.php/42/content/pagina.html?token=[REDACTED]",
+      "module_url": "https://campus.example/moodle/mod/resource/view.php?id=90",
+      "text": "Uno & dos\nTres",
+      "total_characters": 14,
+      "offset": 0,
+      "next_offset": null
+    }
+  }
+]

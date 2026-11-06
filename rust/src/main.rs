@@ -1,3 +1,4 @@
+mod files;
 mod moodle;
 mod server;
 

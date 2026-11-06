@@ -15,6 +15,7 @@ fn server(client: MoodleClient) -> MoodleServer {
     MoodleServer {
         client: Ok(client),
         permissions_path: Ok(temporary()),
+        download_folder: Ok(temporary()),
         tool_router: MoodleServer::tool_router(),
     }
 }
@@ -59,6 +60,37 @@ async fn disabled_permissions_and_invalid_arguments_do_not_make_requests() {
     fs::write(path, r#"{"courses":false,"materials":false,"assignments":false,"calendar":false,"downloads":false}"#).unwrap();
     assert!(server.courses().await.unwrap_err().contains("desactivada"));
     assert!(server.events().await.unwrap_err().contains("desactivada"));
+    let read = server
+        .read_course_file(Parameters(ReadFile {
+            course_id: 7,
+            module_id: 90,
+            file_index: 0,
+            offset: 0,
+        }))
+        .await;
+    assert!(read.is_error.unwrap_or(false));
+    assert!(
+        read.content[0]
+            .as_text()
+            .unwrap()
+            .text
+            .contains("desactivada")
+    );
+    let download = server
+        .download_course_file(Parameters(CourseFile {
+            course_id: 7,
+            module_id: 90,
+            file_index: 0,
+        }))
+        .await;
+    assert!(download.is_error.unwrap_or(false));
+    assert!(
+        download.content[0]
+            .as_text()
+            .unwrap()
+            .text
+            .contains("desactivada")
+    );
     assert!(
         server
             .assignments(7)

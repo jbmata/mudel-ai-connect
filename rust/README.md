@@ -1,13 +1,15 @@
 # Migración del servidor a Rust
 
-Primera etapa experimental en `migration/rust`. El programa y el plugin distribuidos
+Servidor experimental en `migration/rust`. El programa y el plugin distribuidos
 siguen usando Python; esta carpeta no cambia las instalaciones existentes.
 
-Ya están portadas las cinco consultas `moodle_status`, `list_courses`,
-`get_course_context`, `list_assignments` y `get_upcoming_events`, usando el
+Ya están portadas las siete herramientas `moodle_status`, `list_courses`,
+`get_course_context`, `list_assignments`, `get_upcoming_events`, `read_course_file`
+y `download_course_file`, y el prompt `estudiar_curso`, usando el
 [SDK oficial de MCP para Rust](https://github.com/modelcontextprotocol/rust-sdk).
 Conservan los nombres, los parámetros y los resultados estructurados de Python.
 Una misma muestra de Moodle y sus resultados de referencia comprueban ambos servidores.
+La lectura PDF usa un extractor distinto: el espaciado del texto puede variar.
 
 ## Compilar y comprobar
 
@@ -65,13 +67,35 @@ para diagnóstico. La ruta de macOS se conserva provisionalmente para compartir 
 permisos con Python, hasta migrar el almacenamiento nativo.
 
 Las peticiones son POST al campus HTTPS configurado, sin seguir redirecciones ni
-usar proxies del entorno, con 30 segundos de espera y un máximo de 10 MiB por respuesta.
+usar proxies del entorno, con 30 segundos de espera y un máximo de 10 MiB por respuesta
+de consulta o lectura, y 200 MiB para guardar una descarga en disco.
 Solo se admiten las cinco funciones de consulta de Moodle ya autorizadas en Python.
 Las respuestas ocultan los tokens y no propagan los mensajes del servidor en errores.
 
+## Archivos
+
+`read_course_file` admite PDF con texto, HTML, TXT, MD y CSV. Devuelve fragmentos de
+12.000 caracteres con `next_offset`. Rechaza PDF cifrados o sin texto extraíble;
+no incorpora OCR. Los adjuntos deben pertenecer al curso y al mismo campus, por el
+endpoint `webservice/pluginfile.php`; el token viaja en el cuerpo POST.
+
+`download_course_file` solo guarda archivos de asignaturas de la cuenta conectada.
+Respeta `downloads.json`, guardado por el instalador Python, y usa la carpeta
+Descargas del sistema si no hay elección o si la elegida ya no existe. En Windows
+consulta la carpeta conocida del usuario, también si se ha movido a OneDrive.
+La IA no puede elegir una ruta. Los nombres se normalizan y las descargas se escriben
+en un temporal dentro de la carpeta de destino. La publicación no sobrescribe archivos,
+incluso con descargas concurrentes: reutiliza contenido idéntico o añade un número.
+Los temporales se eliminan si hay errores.
+
+Se conserva el bloqueo de programas y scripts de Windows y se añaden formatos
+ejecutables de macOS, como `.app`, `.command`, `.dmg`, `.pkg` y `.sh`. Los archivos
+se marcan con `Zone.Identifier` en Windows y `com.apple.quarantine` en macOS.
+Si el sistema de archivos no permite esa marca, el resultado incluye un aviso.
+La herramienta no abre ni ejecuta los archivos descargados.
+
 ## Lo que falta antes de sustituir Python
 
-- Portar `read_course_file`, `download_course_file` y el prompt `estudiar_curso`.
 - Conservar el acceso a las credenciales DPAPI de Windows y añadir el Llavero de macOS.
 - Migrar el lanzador, el instalador y la interfaz; actualizar manifiestos y empaquetado.
 - Validar en equipos Windows y Mac y con Moodle real antes de distribuir esta versión.

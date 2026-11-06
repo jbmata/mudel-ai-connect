@@ -18,9 +18,16 @@ pub(crate) fn response(status: u16, body: &str) -> String {
 pub(crate) fn mock(
     responses: Vec<String>,
 ) -> (MoodleClient, mpsc::Receiver<String>, thread::JoinHandle<()>) {
+    mock_with(|_| responses.into_iter().map(String::into_bytes).collect())
+}
+
+pub(crate) fn mock_with(
+    build: impl FnOnce(&str) -> Vec<Vec<u8>>,
+) -> (MoodleClient, mpsc::Receiver<String>, thread::JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let mut client = MoodleClient::new("https://campus.example/moodle", "secret123").unwrap();
     client.base_url = format!("http://{}/moodle", listener.local_addr().unwrap());
+    let responses = build(&client.base_url);
     let (sender, receiver) = mpsc::channel();
     let handle = thread::spawn(move || {
         for response in responses {
@@ -53,7 +60,7 @@ pub(crate) fn mock(
             }
             sender.send(String::from_utf8(request).unwrap()).unwrap();
             // El cliente puede cerrar antes de consumir una respuesta demasiado grande.
-            let _ = stream.write_all(response.as_bytes());
+            let _ = stream.write_all(&response);
         }
     });
     (client, receiver, handle)
@@ -71,6 +78,53 @@ fn configuration_requires_https_and_an_ascii_token() {
     ] {
         assert!(MoodleClient::new(url, token).is_err());
     }
+}
+
+#[test]
+fn file_urls_reject_other_origins_endpoints_and_encoded_traversal() {
+    let client = MoodleClient::new("https://campus.example/moodle", "secret123").unwrap();
+    for url in [
+        "https://other.example/webservice/pluginfile.php/1/a.txt",
+        "http://campus.example/moodle/webservice/pluginfile.php/1/a.txt",
+        "https://campus.example/moodle/login/index.php",
+        "https://campus.example/moodle/webservice/pluginfile.php/../rest/server.php",
+        "https://campus.example/moodle/webservice/pluginfile.php/%2e%2e/rest/server.php",
+        "https://campus.example/moodle/webservice/pluginfile.php/a%2f..%2frest/server.php",
+        "https://campus.example/moodle/webservice/pluginfile.php/%5cother/a.txt",
+        "https://user:password@campus.example/moodle/webservice/pluginfile.php/1/a.txt",
+    ] {
+        assert!(client.file_request_url(url).is_err(), "{url}");
+    }
+    let url = client.file_request_url("https://campus.example/moodle/webservice/pluginfile.php?file=%2F42%2Fcontent%2Fapuntes.txt&TOKEN=old&wstoken=another#fragment").unwrap();
+    assert_eq!(
+        url.query_pairs().collect::<Vec<_>>(),
+        vec![("file".into(), "/42/content/apuntes.txt".into())]
+    );
+    assert!(url.fragment().is_none());
+}
+
+#[tokio::test]
+async fn streamed_files_enforce_limits_and_put_the_token_only_in_the_post_body() {
+    let (client, requests, handle) =
+        mock_with(|_| vec![b"HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n12345".to_vec()]);
+    let mut body = Vec::new();
+    let url = format!(
+        "{}/webservice/pluginfile.php?file=%2F42%2Fcontent%2Ftest&token=old",
+        client.base_url
+    );
+    assert!(
+        client
+            .save(&url, &mut body, 4)
+            .await
+            .unwrap_err()
+            .contains("límite")
+    );
+    assert!(body.len() <= 4);
+    let request = requests.recv().unwrap();
+    assert!(!request.lines().next().unwrap().contains("token="));
+    assert!(request.ends_with("token=secret123"));
+    assert!(!request.contains("old"));
+    handle.join().unwrap();
 }
 
 #[tokio::test]
