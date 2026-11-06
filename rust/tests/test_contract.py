@@ -119,6 +119,11 @@ class CredentialTests(unittest.TestCase):
             result = subprocess.run([str(BINARY), "--check"], env={**env,
                 "MOODLE_URL": "https://other.example"}, capture_output=True, timeout=15)
             self.assertIn("juntas", result.stderr.decode("utf-8"))
+            saved.unlink()
+            result = subprocess.run([str(BINARY), "--check"], env=env, capture_output=True, timeout=15)
+            self.assertIn("Falta configurar", result.stderr.decode("utf-8"))
+            self.assertNotIn("No se pudo consultar Moodle", result.stderr.decode("utf-8"))
+            self.assertNotIn(b"PluginSecret123", result.stdout + result.stderr)
 
 
 class StdioTests(unittest.IsolatedAsyncioTestCase):

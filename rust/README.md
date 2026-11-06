@@ -69,6 +69,8 @@ $env:RUSTFLAGS = '-C link-self-contained=yes -C linker=rust-lld'
 ```
 
 El script compila primero el servidor y después lo incluye en el instalador.
+En Windows con MSVC enlaza el runtime de C de forma estática para no exigir
+que el usuario instale Visual C++ Redistributable.
 Comprueba que el servidor incluido funciona y coincide con el del plugin. Los ZIP
 se generan con una lista de archivos públicos; no incluyen entornos ni credenciales.
 Cada plataforma recibe su instalador, plugin, licencia, guía y `SHA256SUMS.txt`.
@@ -133,9 +135,9 @@ El servidor puede usar una cuenta guardada sin Python:
   [API nativa](https://docs.rs/security-framework/3.7.0/security_framework/passwords/index.html),
   con servicio `mudel-ai-connect` y cuenta `moodle`. No crea un archivo con el token.
   El sistema puede solicitar permiso para acceder a esa entrada.
-- Si no hay cuenta nativa, admite el `credentials.json` existente de Python.
-  Solo lo lee; no lo elimina ni modifica. Un almacén nativo corrupto o inaccesible
-  produce un error, sin cambiar a otra cuenta.
+- El plugin admite su `credentials.json` existente de Python. Solo lo lee; no lo
+  elimina ni modifica. El programa usa su propia cuenta y nunca recurre a la del
+  plugin. Un almacén corrupto o inaccesible produce un error, sin cambiar de cuenta.
 
 El lanzador del plugin añade `--plugin`: usa `credentials.json` con DPAPI en Windows
 y la entrada `plugin` del Llavero en Mac. Puede leer la cuenta previa de Python.

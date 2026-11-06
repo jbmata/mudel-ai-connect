@@ -50,15 +50,25 @@ function Zip-Public([string]$Directory, [string]$Archive, [bool]$KeepParent = $f
 }
 
 if ($onMac -and -not $env:MACOSX_DEPLOYMENT_TARGET) { $env:MACOSX_DEPLOYMENT_TARGET = '11.0' }
-Invoke-Cargo (@('build', '--manifest-path', $manifest, '--locked', '--bin', 'mudel-ai-connect-server') + $cargoTarget + $cargoProfile)
 $suffix = if ($onWindows) { '.exe' } else { '' }
 $serverName = "mudel-ai-connect-server$suffix"
-$server = Join-Path $build $serverName
 $previousPayload = $env:MUDEL_SERVER_BINARY
+$previousRustFlags = $env:RUSTFLAGS
 try {
+    if ($onWindows -and $triple.EndsWith('-msvc')) {
+        # El equipo del usuario no necesita instalar el runtime de Visual C++.
+        $env:RUSTFLAGS = ($env:RUSTFLAGS + ' -C target-feature=+crt-static').Trim()
+        $cargoTarget = @('--target', $triple)
+        $build = Join-Path $root "rust/target/$triple/$Profile"
+    }
+    Invoke-Cargo (@('build', '--manifest-path', $manifest, '--locked', '--bin', 'mudel-ai-connect-server') + $cargoTarget + $cargoProfile)
+    $server = Join-Path $build $serverName
     $env:MUDEL_SERVER_BINARY = $server
     Invoke-Cargo (@('build', '--manifest-path', $manifest, '--locked', '--features', 'desktop', '--bin', 'mudel-ai-connect-setup') + $cargoTarget + $cargoProfile)
-} finally { $env:MUDEL_SERVER_BINARY = $previousPayload }
+} finally {
+    $env:MUDEL_SERVER_BINARY = $previousPayload
+    $env:RUSTFLAGS = $previousRustFlags
+}
 $setup = Join-Path $build "mudel-ai-connect-setup$suffix"
 $checkText = (& $setup --package-check | Out-String)
 if ($LASTEXITCODE -ne 0) { throw 'Falló la comprobación del servidor incluido en el instalador.' }

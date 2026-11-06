@@ -89,8 +89,7 @@ pub fn load(kind: Kind) -> Result<Credentials, String> {
             if let Some(account) = read(&directory, kind)? {
                 return Ok(account);
             }
-            // Compatibilidad con el servidor de la primera etapa y las cuentas Python existentes.
-            read_file(&directory.join("credentials.json"), false)?.ok_or_else(|| "Falta configurar la cuenta de Moodle con --setup.".into())
+            Err("Falta configurar la cuenta de Moodle con --setup.".into())
         }
     }
 }
