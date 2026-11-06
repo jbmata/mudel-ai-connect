@@ -2,7 +2,7 @@
 
 Para la aplicación nativa usa `./rust/scripts/package.ps1`: genera el instalador,
 el plugin y las huellas en `dist/native/<sistema-arquitectura>/`. El workflow Tests
-los comprueba y conserva como artefactos para Windows, Mac Intel y Apple Silicon.
+los comprueba y conserva como artefactos para Windows y Mac con Apple Silicon.
 La [guía nativa](rust/README.md) detalla el uso. No necesita PyInstaller. Los pasos
 de generación siguientes corresponden al paquete Python anterior.
 

@@ -5,7 +5,7 @@ de IA compatible con MCP. Está preparado para [SIFO de Comillas](https://sifo.c
 y utiliza los permisos de la cuenta conectada. Nada cambia en Moodle: las herramientas
 leen, y la de descarga solo guarda archivos en tu carpeta Descargas.
 
-Aplicación nativa para Windows y macOS en la rama `migration/rust`, con interfaz,
+Aplicación nativa para Windows y macOS con Apple Silicon en la rama `migration/rust`, con interfaz,
 instalador y plugin sin Python: [instalación y compilación](rust/README.md).
 La versión Python anterior se conserva: [programa](local/README.md) · [plugin](local/PLUGIN.md).
 
@@ -130,8 +130,8 @@ python -m venv .venv
 y respuestas simuladas de Moodle. `local/requirements.txt` incluye las dependencias
 del núcleo MCP.
 
-GitHub Actions comprueba Python y los paquetes nativos de Windows, Mac Intel y
-Mac Apple Silicon en cada push y pull request. Las pruebas Rust y la generación
+GitHub Actions comprueba Python y los paquetes nativos de Windows y
+Mac con Apple Silicon en cada push y pull request. Las pruebas Rust y la generación
 de paquetes se explican en [rust/README.md](rust/README.md).
 
 ## Publicación y licencia

@@ -1,6 +1,6 @@
 # Mudel AI Connect nativo
 
-Aplicación Rust para Windows y macOS, en `migration/rust`: servidor MCP, lanzador
+Aplicación Rust para Windows y macOS con Apple Silicon, en `migration/rust`: servidor MCP, lanzador
 del plugin, ventana e instalador. Los paquetes nativos no necesitan Python.
 La implementación Python se conserva como referencia y para comprobar compatibilidad.
 Los paquetes siguen siendo experimentales hasta probarlos con un campus real.
@@ -19,7 +19,7 @@ Los paquetes están en `dist/native/<sistema-arquitectura>/`, o en los artefacto
 `mudel-native-*` del workflow Tests de GitHub Actions:
 
 - Windows x64: abre `Mudel-AI-Connect-Setup.exe`.
-- Mac Intel o Apple Silicon: extrae el ZIP de tu arquitectura y abre
+- Mac con Apple Silicon: extrae `Mudel-AI-Connect-Setup-macos-aarch64.zip` y abre
   `Mudel AI Connect.app`. Conserva la app para editar permisos o desinstalar después.
   Puedes moverla a tu carpeta de Aplicaciones antes de abrirla.
 - El ZIP `mudel-ai-connect-plugin-native-*` contiene el plugin para esa misma plataforma.
@@ -51,7 +51,7 @@ del plugin. El token no se anula en Moodle al borrarlo del equipo.
 No se requieren privilegios de administrador. Los paquetes de desarrollo no tienen
 firma de desarrollador de Windows ni notarización de Apple; la app Mac usa firma local.
 Las compilaciones de Mac se dirigen a macOS 11 o superior y se comprueban en CI
-con equipos Intel y Apple Silicon; falta validar versiones antiguas de macOS.
+con Apple Silicon; falta validar versiones antiguas de macOS.
 
 ## Generar el instalador y el plugin
 
@@ -121,7 +121,7 @@ de las herramientas y la conexión MCP de un cliente Python al proceso Rust:
 
 En macOS usa `.venv/bin/python rust/tests/test_contract.py`.
 Las pruebas usan datos ficticios y servidores HTTP locales; no consultan un campus real.
-GitHub Actions prueba Rust en Windows, Mac Intel y Mac Apple Silicon y guarda sus paquetes.
+GitHub Actions prueba Rust en Windows y Mac con Apple Silicon y guarda sus paquetes.
 
 ## Cuenta y permisos
 
