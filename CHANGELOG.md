@@ -20,7 +20,7 @@
   `get_forum_discussions` y `get_discussion_posts`. `moodle_status` indica qué funciones
   opcionales autoriza el campus. En los libros de Moodle, cada capítulo lleva su título.
 - Se retiran del repositorio el instalador, el servidor y las pruebas en Python. Las
-  releases v0.1 y v0.2 se han retirado de GitHub; su código sigue en el historial (etiquetas).
+  releases v0.1 y v0.2 se han retirado de GitHub; su código sigue en el historial (commits `631dc28` y `27a2d6d`).
 - El instalador ya no exige cerrar Claude Desktop ni las demás apps: sustituye el servidor
   aunque esté en uso y avisa al terminar de que Claude Desktop debe reiniciarse.
 - La ventana tiene tamaño fijo, sin barra de desplazamiento, y un aspecto de instalador

@@ -8,7 +8,7 @@ leen, y la de descarga solo guarda archivos en tu carpeta Descargas.
 Aplicación nativa para Windows y macOS con Apple Silicon, escrita en Rust y sin
 necesidad de Python: ventana de instalación, servidor MCP y plugin.
 Las versiones v0.1 y v0.2, escritas en Python, ya no se publican; su código sigue en el
-historial de git (etiquetas `v0.1.0` y `v0.2.0`).
+historial de git (commits `631dc28` para la v0.1 y `27a2d6d` para la v0.2).
 
 El flujo es: **pregunta → IA + skill → MCP → Moodle → respuesta con fuentes**.
 La IA consulta los datos cuando los necesita; no carga todo el campus en cada

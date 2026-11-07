@@ -3,7 +3,7 @@
 Mudel AI Connect es una aplicación Rust para Windows y macOS con Apple Silicon:
 servidor MCP, lanzador del plugin, ventana e instalador. No necesita Python.
 Las versiones v0.1 y v0.2 estaban escritas en Python y ya no se publican (su código sigue en el
-historial, etiquetas `v0.1.0` y `v0.2.0`); esta versión conserva la compatibilidad con sus
+historial: commits `631dc28` para la v0.1 y `27a2d6d` para la v0.2); esta versión conserva la compatibilidad con sus
 cuentas y preferencias guardadas.
 Los paquetes siguen siendo experimentales hasta publicarlos firmados.
 
