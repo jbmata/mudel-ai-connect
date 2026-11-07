@@ -1,19 +1,16 @@
 # Guía de desarrollo
 
 Mudel AI Connect es una aplicación Rust para Windows y macOS con Apple Silicon:
-servidor MCP, lanzador del plugin, ventana e instalador. No necesita Python.
-Las versiones v0.1 y v0.2 estaban escritas en Python y ya no se publican (su código sigue en el
-historial: commits `631dc28` para la v0.1 y `27a2d6d` para la v0.2); esta versión conserva la compatibilidad con sus
-cuentas y preferencias guardadas.
+servidor MCP, lanzador del plugin, ventana e instalador. Reconoce las cuentas y preferencias
+guardadas por versiones anteriores.
 Los paquetes siguen siendo experimentales hasta publicarlos firmados.
 
-Ya están portadas las siete herramientas originales `moodle_status`, `list_courses`,
+Las siete herramientas básicas son `moodle_status`, `list_courses`,
 `get_course_context`, `list_assignments`, `get_upcoming_events`, `read_course_file`
 y `download_course_file`, y el prompt `estudiar_curso`, usando el
 [SDK oficial de MCP para Rust](https://github.com/modelcontextprotocol/rust-sdk).
-Conservan los nombres, los parámetros y los resultados estructurados de las versiones Python.
 Una muestra de Moodle y sus resultados de referencia (`tests/fixtures/`) comprueban el servidor.
-La lectura PDF usa un extractor distinto del de Python: el espaciado del texto puede variar.
+El espaciado del texto extraído de un PDF puede variar según el documento.
 
 ## Instalar y usar
 
@@ -117,7 +114,7 @@ cargo test --locked --features desktop
 
 El binario queda en `target/debug/mudel-ai-connect-server` (`.exe` en Windows).
 Sin argumentos habla MCP por `stdio`. Con `--check` devuelve el estado de Moodle en
-JSON o termina con código 1 y un error en stderr, igual que las versiones Python.
+JSON o termina con código 1 y un error en stderr.
 Para crear un binario optimizado, añade `--release` a `cargo build`; queda en `target/release`.
 
 `cargo test` incluye las pruebas del contrato de las herramientas y las de proceso
@@ -132,18 +129,18 @@ El servidor puede usar una cuenta guardada:
 
 - Windows: lee primero `credentials.dpapi.json` del instalador. Guarda el token con
   [DPAPI para el usuario actual](https://learn.microsoft.com/en-us/windows/win32/api/dpapi/nf-dpapi-cryptprotectdata),
-  en el mismo formato que las versiones Python. `--setup` actualiza esta cuenta y conserva aparte
+  en el formato de versiones anteriores. `--setup` actualiza esta cuenta y conserva aparte
   el archivo `credentials.json` del plugin.
 - macOS: guarda juntos la URL y el token en el Llavero, mediante la
   [API nativa](https://docs.rs/security-framework/3.7.0/security_framework/passwords/index.html),
   con servicio `mudel-ai-connect` y cuenta `moodle`. No crea un archivo con el token.
   El sistema puede solicitar permiso para acceder a esa entrada.
-- El plugin admite su `credentials.json` existente de las versiones Python. Solo lo lee; no lo
+- El plugin admite su `credentials.json` existente de versiones anteriores. Solo lo lee; no lo
   elimina ni modifica. El programa usa su propia cuenta y nunca recurre a la del
   plugin. Un almacén corrupto o inaccesible produce un error, sin cambiar de cuenta.
 
 El lanzador del plugin añade `--plugin`: usa `credentials.json` con DPAPI en Windows
-y la entrada `plugin` del Llavero en Mac. Puede leer la cuenta previa de las versiones Python.
+y la entrada `plugin` del Llavero en Mac. Puede leer la cuenta de versiones anteriores.
 La cuenta `moodle` del instalador permanece separada. Para configurar o comprobar
 el plugin, añade `--plugin` a `--setup` o `--check`. Sus manifiestos ya lo incluyen
 en el arranque MCP; no crean entornos ni instalan dependencias.
@@ -173,7 +170,7 @@ para evitar enviar el token guardado a otro campus. Elimina ambas del entorno pa
 comprobar la cuenta guardada. No se leen archivos `.env`.
 Puede anunciar sus herramientas sin cuenta; las consultas devolverán un error.
 
-Lee los permisos que guardaban las versiones Python, en cada consulta:
+Lee los permisos guardados, en cada consulta:
 
 - Windows: `%LOCALAPPDATA%/mudel-ai-connect/permissions.json`.
 - macOS: `$XDG_DATA_HOME/mudel-ai-connect/permissions.json`, o
@@ -187,7 +184,7 @@ carpeta de descargas con las versiones anteriores; el token nuevo se guarda en e
 Las peticiones son POST al campus HTTPS configurado, sin seguir redirecciones ni
 usar proxies del entorno, con 30 segundos de espera y un máximo de 10 MiB por respuesta
 de consulta o lectura, y 200 MiB para guardar una descarga en disco.
-Solo se admiten las cinco funciones de consulta de Moodle autorizadas desde la v0.1.
+Solo se admiten las cinco funciones de consulta básicas de Moodle y las cinco opcionales descritas más abajo.
 Las respuestas ocultan los tokens y no propagan los mensajes del servidor en errores.
 
 ## Archivos
@@ -235,7 +232,7 @@ factor del usuario. Sí están probados el cálculo de la firma, el rechazo de r
 registro del esquema y que Windows lance la segunda copia con la dirección (que llega con una «/»
 añadida al final, caso que se contempla).
 
-## Herramientas añadidas después de la migración
+## Herramientas adicionales
 
 Todas son de solo lectura y usan las cinco categorías de permisos que ya existían: no se
 añadieron categorías porque el archivo de permisos se valida con exactamente esas cinco.

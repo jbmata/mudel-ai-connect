@@ -1,79 +1,51 @@
 # Cambios
 
-## Sin publicar — aplicación nativa
+## Sin publicar — primera versión
 
-- Todo el programa está reescrito en Rust y no necesita Python: servidor MCP, ventana de
-  instalación y lanzador del plugin. Windows x64 y macOS con Apple Silicon.
-- Las siete herramientas, el prompt `estudiar_curso` y los permisos conservan sus nombres,
-  parámetros y resultados. Las cuentas y preferencias de la v0.2 se reconocen al actualizar.
-- El token se guarda en el Llavero de macOS o cifrado con DPAPI en Windows, con cuentas
-  separadas para el instalador y para el plugin.
-- La ventana avisa de versiones nuevas leyendo las releases públicas de GitHub.
-- Botón **Conectar con tu universidad** (solo Windows): abre la página oficial de acceso del
-  campus, inicias sesión allí (SSO y doble factor incluidos) y Mudel recibe el token y lo
-  guarda, sin ver nunca tu contraseña. Pendiente de probar con un inicio de sesión real.
-- `read_course_file` lee ahora Word (DOCX), PowerPoint (PPTX, con las notas del ponente) y
-  Excel (XLSX), además de las páginas de Moodle. Los formatos antiguos (`.doc`, `.ppt`,
-  `.xls`) se rechazan con un aviso claro.
-- Herramientas nuevas, todas de solo lectura: `read_course_files` (hasta 6 archivos a la
-  vez), `search_course`, `get_assignment_status`, `get_grades`, `list_forums`,
-  `get_forum_discussions` y `get_discussion_posts`. `moodle_status` indica qué funciones
-  opcionales autoriza el campus. En los libros de Moodle, cada capítulo lleva su título.
-- Se retiran del repositorio el instalador, el servidor y las pruebas en Python. Las
-  releases v0.1 y v0.2 se han retirado de GitHub; su código sigue en el historial (commits `631dc28` y `27a2d6d`).
-- El instalador ya no exige cerrar Claude Desktop ni las demás apps: sustituye el servidor
-  aunque esté en uso y avisa al terminar de que Claude Desktop debe reiniciarse.
-- La ventana tiene tamaño fijo, sin barra de desplazamiento, y un aspecto de instalador
-  de escritorio.
-- El empaquetado genera ZIP con rutas válidas también desde Windows PowerShell 5.1.
-
-### Límites conocidos
-
-- Los paquetes aún no están firmados ni notarizados. Algunos antivirus pueden marcarlos.
-- Probado con SIFO (Comillas) en Windows. Falta probar el instalador completo, la descarga
-  de archivos y cada cliente de IA en Windows y en Mac.
-
-## v0.2.0 — beta
-
-- Herramienta `download_course_file`: guarda un archivo del curso, en cualquier formato,
-  en `Descargas\Mudel AI Connect\<asignatura>`. No sobrescribe nada, reutiliza el archivo si
-  ya está igual y Windows lo marca como descargado de internet. No descarga programas ni
-  scripts (`.exe`, `.bat`, `.js`…) y admite hasta 200 MiB.
-- Permiso nuevo **Descargar archivos a tu carpeta Descargas**. Si ya habías guardado tus
-  permisos, toma el valor que elegiste para «Materiales y archivos».
-- En **Permisos → Cambiar carpeta…** eliges dónde se guardan las descargas. Si esa carpeta
-  no está disponible, se guardan en Descargas y se avisa.
-
-## v0.1.0 — beta
-
-Primera versión de prueba. Pensada para un grupo reducido que pueda informar de fallos.
+Pensada para un grupo reducido de pruebas que pueda informar de fallos.
 
 ### Incluye
 
-- Instalador para Windows, `Mudel-AI-Connect-Setup.exe`, que no necesita Python. Conecta
-  Claude Desktop, Claude Code y ChatGPT Work local / Codex con un servidor MCP local de
-  solo lectura.
-- Plugin para Codex y Claude Code, con las skills de estudio y de configuración
-  (requiere Python 3.11 o superior).
-- Token de Moodle cifrado con tu usuario de Windows (DPAPI) y enviado solo a tu Moodle.
-- Botón **Permisos** para elegir qué puede consultar la IA.
-- Estado de cada aplicación en vivo, reparación de instalaciones incompletas y
-  desinstalación que avisa si algo queda.
-- **Copiar diagnóstico** para pedir ayuda (no incluye el token) y aviso de versiones nuevas.
-- Migración automática desde «Moodle AI Connect»: reutiliza el token guardado y retira
-  las entradas con el nombre anterior.
-- Compatible con la nueva carpeta de datos de Claude Desktop (`%LOCALAPPDATA%\Claude-Data`),
-  que usa desde la versión 4.16336.
+- Instalador con ventana para **Windows** (x64) y **macOS** (Apple Silicon). Conecta Claude
+  Desktop, Claude Code y ChatGPT Work local / Codex con un servidor MCP local de solo lectura.
+- Plugin para Codex y Claude Code, con las skills de estudio y de configuración.
+- Botón **Conectar con tu universidad** (solo Windows): abre la página oficial de acceso del
+  campus, inicias sesión allí (SSO y doble factor incluidos) y Mudel recibe el token y lo
+  guarda, sin ver nunca tu contraseña. Pendiente de probar con un inicio de sesión real.
+- El token se guarda en el Llavero de macOS o cifrado con DPAPI en Windows, con cuentas
+  separadas para el instalador y para el plugin, y solo se envía a tu Moodle.
+- Consultas: asignaturas, secciones y materiales (`get_course_context`), tareas y plazos,
+  estado de entrega y notas (`get_assignment_status`, `get_grades`), calendario, foros
+  (`list_forums`, `get_forum_discussions`, `get_discussion_posts`) y búsqueda en un curso
+  (`search_course`). `moodle_status` indica qué funciones opcionales autoriza el campus.
+- Lectura de archivos: PDF con texto, Word (DOCX), PowerPoint (PPTX, con las notas del ponente),
+  Excel (XLSX), HTML, texto, páginas y libros de Moodle (`read_course_file`, y
+  `read_course_files` para hasta 6 archivos a la vez). Los formatos antiguos (`.doc`, `.ppt`,
+  `.xls`) se rechazan con un aviso claro.
+- `download_course_file`: guarda un archivo del curso, en cualquier formato, en
+  `Descargas/Mudel AI Connect/<asignatura>` (o en la carpeta que elijas en **Permisos**). No
+  sobrescribe nada, reutiliza el archivo si ya está igual y lo marca como descargado de
+  internet. No descarga programas ni scripts y admite hasta 200 MiB.
+- Botón **Permisos** para elegir qué puede consultar y descargar la IA.
+- El instalador no exige cerrar Claude Desktop ni las demás apps: sustituye el servidor
+  aunque esté en uso y avisa al terminar de que Claude Desktop debe reiniciarse.
+- Estado de cada aplicación en vivo, reparación de instalaciones incompletas y desinstalación.
+- **Copiar diagnóstico** para pedir ayuda (no incluye el token) y aviso de versiones nuevas
+  leyendo las releases públicas de GitHub.
+- Migración automática desde «Moodle AI Connect»: reutiliza el token guardado y retira las
+  entradas con el nombre anterior.
+- Compatible con la carpeta de datos de Claude Desktop de las versiones recientes
+  (`%LOCALAPPDATA%\Claude-Data`).
 
 ### Límites conocidos
 
-- Solo Windows. El instalador **no está firmado**: SmartScreen y algunos antivirus pueden
-  avisar. Comprueba la huella con `SHA256SUMS.txt`.
-- Probado con SIFO (Universidad Pontificia Comillas). Otros campus deben permitir a los
-  alumnos crear un token del servicio móvil de Moodle.
-- ChatGPT: solo en **Work local**. El registro está comprobado, pero falta verificar una
-  consulta real; el modo Chat no recibe el MCP.
+- Los paquetes aún no están firmados ni notarizados: SmartScreen y algunos antivirus pueden
+  avisar o marcarlos como sospechosos. Comprueba la huella con `SHA256SUMS.txt`.
+- Probado con SIFO (Universidad Pontificia Comillas) en Windows. Otros campus deben permitir a
+  los alumnos crear un token del servicio móvil de Moodle.
+- Falta probar el instalador completo, la descarga de archivos y cada cliente de IA en Windows
+  y en Mac.
+- ChatGPT: solo en **Work local**. El modo Chat no recibe el MCP.
 - Depende de dónde guardan su configuración Claude y Codex. Si una actualización de esas
-  aplicaciones lo cambia, hará falta una versión nueva del instalador.
-- No aparece en «Aplicaciones instaladas» de Windows: se desinstala desde el propio programa.
+  aplicaciones lo cambia, hará falta una versión nueva.
 - El PC debe estar encendido mientras usas la conexión.

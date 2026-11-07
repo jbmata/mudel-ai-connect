@@ -66,7 +66,7 @@ pub fn data_dir() -> Result<PathBuf, String> {
             .map(Ok)
             .unwrap_or_else(|| home().map(|home| home.join("AppData/Local")))?
     } else {
-        // Comparte permisos y descargas con las versiones Python anteriores aunque la cuenta use el Llavero.
+        // Comparte permisos y descargas con versiones anteriores aunque la cuenta use el Llavero.
         std::env::var_os("XDG_DATA_HOME")
             .map(PathBuf::from)
             .map(Ok)
@@ -292,7 +292,7 @@ fn dpapi(bytes: &[u8], protect: bool) -> Result<Vec<u8>, String> {
     };
     let mut output = CRYPT_INTEGER_BLOB::default();
     let description: Vec<u16> = "mudel-ai-connect\0".encode_utf16().collect();
-    // DPAPI usa el usuario actual, sin entropía adicional, igual que el instalador Python anterior (v0.1 y v0.2).
+    // DPAPI usa el usuario actual, sin entropía adicional, igual que en versiones anteriores.
     unsafe {
         let success = if protect {
             CryptProtectData(
