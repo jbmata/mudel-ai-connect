@@ -131,7 +131,7 @@ async fn disabled_permissions_and_invalid_arguments_do_not_make_requests() {
 }
 
 #[tokio::test]
-async fn five_tools_match_the_python_contract() {
+async fn five_tools_match_the_reference_contract() {
     let fixture: Value =
         serde_json::from_str(include_str!("../../tests/fixtures/moodle.json")).unwrap();
     let raw = &fixture["responses"];
@@ -203,4 +203,40 @@ async fn pagination_returns_the_last_section_and_handles_large_offsets() {
     assert_eq!(empty["sections"], json!([]));
     assert_eq!(empty["next_section_start"], Value::Null);
     handle.join().unwrap();
+}
+
+#[tokio::test]
+async fn study_prompt_embeds_the_instructions_and_the_request() {
+    let (client, _requests, _handle) = mock(vec![]);
+    let server = server(client);
+    let text = |messages: Vec<PromptMessage>| {
+        serde_json::to_value(&messages[0]).unwrap()["content"]["text"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    let default = text(
+        server
+            .estudiar_curso(Parameters(Study {
+                course_id: "7".into(),
+                pregunta: None,
+            }))
+            .await,
+    );
+    assert_eq!(
+        default,
+        format!(
+            "{INSTRUCTIONS}\nCurso solicitado: 7.\nPetición del usuario: Ayúdame a estudiar esta asignatura\nCarga el contexto del curso y lee los materiales relevantes. Separa lo que aparece en las fuentes de tu explicación y cita sus enlaces."
+        )
+    );
+    let custom = text(
+        server
+            .estudiar_curso(Parameters(Study {
+                course_id: "7".into(),
+                pregunta: Some("Explica el tema 1".into()),
+            }))
+            .await,
+    );
+    assert!(custom.contains("Curso solicitado: 7.\nPetición del usuario: Explica el tema 1\n"));
+    assert!(custom.starts_with(INSTRUCTIONS));
 }

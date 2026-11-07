@@ -87,11 +87,11 @@ try {
     New-Item -ItemType Directory -Path (Join-Path $plugin 'bin') -Force | Out-Null
     $sources = @{
         'LICENSE' = 'LICENSE'
-        'assets/logo.png' = 'shared/assets/logo.png'
-        'skills/mudel-ai-connect-study/SKILL.md' = 'local/skills/mudel-ai-connect-study/SKILL.md'
-        'skills/mudel-ai-connect-study/agents/openai.yaml' = 'local/skills/mudel-ai-connect-study/agents/openai.yaml'
+        'assets/logo.png' = 'rust/assets/logo.png'
+        'skills/mudel-ai-connect-study/SKILL.md' = 'rust/plugin/skills/mudel-ai-connect-study/SKILL.md'
+        'skills/mudel-ai-connect-study/agents/openai.yaml' = 'rust/plugin/skills/mudel-ai-connect-study/agents/openai.yaml'
         'skills/setup/SKILL.md' = 'rust/plugin/skills/setup/SKILL.md'
-        'skills/setup/agents/openai.yaml' = 'local/skills/setup/agents/openai.yaml'
+        'skills/setup/agents/openai.yaml' = 'rust/plugin/skills/setup/agents/openai.yaml'
     }
     foreach ($name in $sources.Keys) {
         $destination = Join-Path $plugin $name
@@ -99,10 +99,10 @@ try {
         Copy-Item -LiteralPath (Join-Path $root $sources[$name]) -Destination $destination
     }
     Copy-Item -LiteralPath $server -Destination (Join-Path $plugin "bin/$serverName")
-    $metadata = Get-Content -LiteralPath (Join-Path $root 'local/plugin.json') -Raw | ConvertFrom-Json
+    $metadata = Get-Content -LiteralPath (Join-Path $root 'rust/plugin/metadata/plugin.json') -Raw | ConvertFrom-Json
     if ($metadata.version -ne $check.version) { throw 'La versión de Rust no coincide con la del plugin.' }
     Write-Json (Join-Path $plugin 'plugin.json') $metadata
-    $claudeMetadata = Get-Content -LiteralPath (Join-Path $root 'local/.claude-plugin/plugin.json') -Raw | ConvertFrom-Json
+    $claudeMetadata = Get-Content -LiteralPath (Join-Path $root 'rust/plugin/metadata/claude-plugin.json') -Raw | ConvertFrom-Json
     New-Item -ItemType Directory -Path (Join-Path $plugin '.claude-plugin') -Force | Out-Null
     Write-Json (Join-Path $plugin '.claude-plugin/plugin.json') $claudeMetadata
     foreach ($entry in @(@('mcp.json', '${PLUGIN_ROOT}'), @('.mcp.json', '${CLAUDE_PLUGIN_ROOT}'))) {

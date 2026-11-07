@@ -56,7 +56,7 @@ class PackageTests(unittest.TestCase):
         value = json.loads(result.stdout)
         self.assertEqual(value["server_bytes"], len(binary))
         self.assertEqual(value["server_sha256"], hashlib.sha256(binary).hexdigest())
-        self.assertEqual(value["version"], json.loads((ROOT / "local/plugin.json").read_text())["version"])
+        self.assertEqual(value["version"], json.loads((ROOT / "rust/plugin/metadata/plugin.json").read_text())["version"])
 
     def test_checksums_cover_the_deliverables_without_paths_outside_the_package(self):
         sums = (DIRECTORY / "SHA256SUMS.txt").read_text().splitlines()

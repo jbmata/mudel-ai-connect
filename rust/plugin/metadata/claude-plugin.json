@@ -1,0 +1,7 @@
+{
+  "name": "mudel-ai-connect",
+  "version": "0.2.0",
+  "description": "Mudel AI Connect permite consultar tus asignaturas, materiales y fechas de Moodle y estudiar con fuentes.",
+  "mcpServers": "./.mcp.json",
+  "icon": "./assets/logo.png"
+}

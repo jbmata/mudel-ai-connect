@@ -11,11 +11,12 @@ use mudel_ai_connect_server::{
     credentials::{self, Kind},
     files,
     installer::{self, Client, Paths},
+    updates::{self, Release},
 };
 
 const PINK: Color32 = Color32::from_rgb(249, 1, 124);
 const INK: Color32 = Color32::from_rgb(25, 26, 30);
-const LOGO: &[u8] = include_bytes!("../../local/assets/logo-setup.png");
+const LOGO: &[u8] = include_bytes!("../assets/logo-setup.png");
 
 enum Event {
     Progress(String),
@@ -41,6 +42,8 @@ struct Setup {
     message: String,
     error: bool,
     task: Option<Receiver<Event>>,
+    update_check: Option<Receiver<Option<Release>>>,
+    newer: Option<Release>,
     logo: Option<egui::TextureHandle>,
 }
 
@@ -69,6 +72,8 @@ impl Setup {
             message: String::new(),
             error: false,
             task: None,
+            update_check: Some(check_for_updates(ctx)),
+            newer: None,
             logo,
         };
         match credentials::read(&setup.paths.data, Kind::Installed) {
@@ -160,6 +165,16 @@ impl Setup {
     }
 
     fn poll(&mut self, ctx: &egui::Context) {
+        if let Some(receiver) = &self.update_check {
+            match receiver.try_recv() {
+                Ok(found) => {
+                    self.newer = found;
+                    self.update_check = None;
+                }
+                Err(mpsc::TryRecvError::Disconnected) => self.update_check = None,
+                Err(mpsc::TryRecvError::Empty) => (),
+            }
+        }
         if let Some(receiver) = &self.task {
             let events: Vec<_> = receiver.try_iter().collect();
             for event in events {
@@ -195,6 +210,15 @@ impl Setup {
                         ui.label("Conecta tus asignaturas con tu IA.");
                     });
                 });
+                if let Some(release) = &self.newer {
+                    ui.add_space(10.0);
+                    egui::Frame::group(ui.style()).inner_margin(10.0).show(ui, |ui| {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(format!("Hay una versión nueva ({}).", release.version));
+                            ui.hyperlink_to("Ver y descargar", &release.url);
+                        });
+                    });
+                }
                 ui.add_space(20.0);
                 ui.add_enabled_ui(!busy && !self.confirm_remove, |ui| {
                     let label = ui.label(RichText::new("DIRECCIÓN DE MOODLE").strong());
@@ -257,7 +281,7 @@ impl Setup {
                     ctx.copy_text(installer::diagnostics(&self.paths));
                     self.message = "Diagnóstico copiado: no contiene el token.".into(); self.error = false;
                 }
-                ui.hyperlink_to("Versiones y actualizaciones", "https://github.com/jbmata/mudel-ai-connect/releases");
+                ui.hyperlink_to("Versiones y actualizaciones", updates::RELEASES_PAGE);
             });
         });
         if self.preferences {
@@ -318,6 +342,22 @@ impl eframe::App for Setup {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.show(ctx);
     }
+}
+
+/// Consulta en segundo plano si hay una versión nueva; sin red, simplemente no avisa.
+fn check_for_updates(ctx: &egui::Context) -> Receiver<Option<Release>> {
+    let (sender, receiver) = mpsc::channel();
+    let ctx = ctx.clone();
+    std::thread::spawn(move || {
+        let found = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .ok()
+            .and_then(|runtime| runtime.block_on(updates::check(env!("CARGO_PKG_VERSION"))));
+        let _ = sender.send(found);
+        ctx.request_repaint();
+    });
+    receiver
 }
 
 fn main() -> eframe::Result {
@@ -405,6 +445,11 @@ mod tests {
             message: "Prueba".into(),
             error: false,
             task: None,
+            update_check: None,
+            newer: Some(Release {
+                version: "v9.9.9".into(),
+                url: "https://github.com/jbmata/mudel-ai-connect/releases/tag/v9.9.9".into(),
+            }),
             logo: None,
         };
         for size in [[440.0, 480.0], [600.0, 780.0]] {
