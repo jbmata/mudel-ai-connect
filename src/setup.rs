@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui;
 use mudel_ai_connect_server::{
     credentials::{self, Kind},
     files,
@@ -14,8 +14,9 @@ use mudel_ai_connect_server::{
     updates::{self, Release},
 };
 
-const PINK: Color32 = Color32::from_rgb(249, 1, 124);
-const INK: Color32 = Color32::from_rgb(25, 26, 30);
+#[path = "setup/theme.rs"]
+mod theme;
+
 const LOGO: &[u8] = include_bytes!("../assets/logo-setup.png");
 
 enum Event {
@@ -196,141 +197,295 @@ impl Setup {
 
     fn show(&mut self, ctx: &egui::Context) {
         self.poll(ctx);
+        fit_to_screen(ctx);
         let busy = self.task.is_some();
         if busy && ctx.input(|input| input.viewport().close_requested()) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
         }
-        egui::CentralPanel::default().show(ctx, |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                ui.add_space(14.0);
-                ui.horizontal(|ui| {
-                    if let Some(logo) = &self.logo { ui.image((logo.id(), egui::vec2(72.0, 72.0))); }
-                    ui.vertical(|ui| {
-                        ui.heading(RichText::new("Mudel AI Connect").size(27.0).color(INK));
-                        ui.label("Conecta tus asignaturas con tu IA.");
-                    });
-                });
-                if let Some(release) = &self.newer {
-                    ui.add_space(10.0);
-                    egui::Frame::group(ui.style()).inner_margin(10.0).show(ui, |ui| {
-                        ui.horizontal_wrapped(|ui| {
-                            ui.label(format!("Hay una versión nueva ({}).", release.version));
-                            ui.hyperlink_to("Ver y descargar", &release.url);
-                        });
-                    });
-                }
-                ui.add_space(20.0);
+        egui::TopBottomPanel::bottom("actions")
+            .frame(
+                egui::Frame::new()
+                    .fill(theme::CARD)
+                    .inner_margin(egui::Margin::symmetric(22, 12)),
+            )
+            .show(ctx, |ui| {
                 ui.add_enabled_ui(!busy && !self.confirm_remove, |ui| {
-                    let label = ui.label(RichText::new("DIRECCIÓN DE MOODLE").strong());
-                    ui.add(egui::TextEdit::singleline(&mut self.url).desired_width(f32::INFINITY)).labelled_by(label.id);
-                    ui.add_space(12.0);
-                    let label = ui.label(RichText::new("TOKEN DE SERVICIOS WEB").strong());
-                    ui.add(egui::TextEdit::singleline(&mut self.token).password(true).desired_width(f32::INFINITY)
-                        .hint_text("Vacío: conservar la cuenta guardada para este campus")).labelled_by(label.id);
-                    egui::CollapsingHeader::new("Cómo obtener el token").show(ui, |ui| {
-                        ui.label("En Moodle: tu foto o nombre → Preferencias → Cuenta de usuario → Claves de seguridad. Copia el token de Servicios web, no el de RSS.");
-                        ui.label("Si no aparece, pídelo al soporte del centro. Nunca introduzcas tu contraseña de Moodle aquí ni el token en un chat.");
-                    });
-                    ui.add_space(14.0);
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new("CONECTAR CON").strong());
-                        if ui.small_button("Actualizar lista").clicked() { self.refresh(); }
-                    });
-                    if self.rows.is_empty() {
-                        ui.label("Abre una vez Claude Desktop, Claude Code o Codex y actualiza la lista.");
-                    }
-                    for row in &mut self.rows {
-                        ui.horizontal(|ui| {
-                            ui.checkbox(&mut row.selected, &row.client.name);
-                            ui.label(RichText::new(&row.state).small().color(if row.state == "Actualizar" { PINK } else { Color32::GRAY }));
-                        });
-                        if !row.client.selected && row.client.key == "codex" { ui.small("Ya tiene el plugin; no necesita otra conexión."); }
-                    }
-                    ui.add_space(14.0);
-                    ui.label("El token se guarda en el almacén seguro del sistema y solo se envía a tu Moodle.");
-                    ui.add_space(12.0);
-                    ui.horizontal_wrapped(|ui| {
-                        let installed = self.paths.installed() || self.saved_account;
-                        let title = if installed { "Actualizar / reparar" } else { "Instalar" };
-                        if ui.add(egui::Button::new(RichText::new(title).color(Color32::WHITE)).fill(INK)).clicked() { self.install(ctx); }
-                        if ui.button("Permisos").clicked() {
-                            self.allowed = match installer::read_permissions(&self.paths) {
-                                Ok(values) => values,
-                                Err(error) => { self.fail(error); [false; 5] }
-                            };
-                            match installer::download_folder(&self.paths) {
-                                Ok(folder) => self.folder = folder,
-                                Err(error) => { self.folder = None; self.fail(error); }
-                            }
-                            self.preferences = true;
-                        }
-                        if ui.add_enabled(installed, egui::Button::new("Desinstalar")).clicked() { self.confirm_remove = true; }
-                    });
+                    self.actions(ui, ctx);
                 });
-                ui.add_space(16.0);
-                if busy { ui.horizontal(|ui| { ui.spinner(); ui.label("Espera a que termine antes de cerrar la ventana."); }); }
-                if !self.message.is_empty() {
-                    egui::Frame::group(ui.style()).inner_margin(12.0).show(ui, |ui| {
-                        ui.colored_label(if self.error { PINK } else { INK }, &self.message);
-                    });
-                }
-                ui.add_space(20.0);
-                ui.separator();
-                ui.small(format!("v{} · Rust · No oficial: sin relación con Moodle ni tu universidad", env!("CARGO_PKG_VERSION")));
-                if ui.add_enabled(!busy, egui::Button::new("Copiar diagnóstico").small()).clicked() {
-                    ctx.copy_text(installer::diagnostics(&self.paths));
-                    self.message = "Diagnóstico copiado: no contiene el token.".into(); self.error = false;
-                }
-                ui.hyperlink_to("Versiones y actualizaciones", updates::RELEASES_PAGE);
             });
+        let frame = egui::Frame::new()
+            .fill(theme::BACKGROUND)
+            .inner_margin(egui::Margin::symmetric(22, 16));
+        egui::CentralPanel::default().frame(frame).show(ctx, |ui| {
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    self.header(ui);
+                    self.update_notice(ui);
+                    ui.add_enabled_ui(!busy && !self.confirm_remove, |ui| {
+                        self.campus_panel(ui);
+                        ui.add_space(10.0);
+                        self.apps_panel(ui);
+                    });
+                    self.status(ui, busy);
+                    self.footer(ui, ctx, busy);
+                });
         });
         if self.preferences {
             self.show_preferences(ctx, busy);
         }
         if self.confirm_remove {
-            egui::Window::new("Desinstalar Mudel AI Connect").collapsible(false).resizable(false)
-                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0]).show(ctx, |ui| {
-                    ui.set_max_width(400.0);
-                    ui.label("Se borrarán el servidor y el token de esta instalación. Se conservarán tus permisos y la cuenta separada del plugin.");
-                    ui.label("Cierra las aplicaciones de IA antes de continuar.");
-                    ui.horizontal(|ui| {
-                        if ui.button("Desinstalar").clicked() {
-                            self.confirm_remove = false;
-                            let paths = self.paths.clone();
-                            self.start(ctx, move |_| installer::uninstall(&paths));
-                        }
-                        if ui.button("Cancelar").clicked() { self.confirm_remove = false; }
-                    });
-                });
+            self.show_uninstall(ctx);
         }
+    }
+
+    fn header(&self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            if let Some(logo) = &self.logo {
+                ui.add(
+                    egui::Image::new((logo.id(), egui::vec2(44.0, 44.0)))
+                        .corner_radius(egui::CornerRadius::same(8)),
+                );
+            }
+            ui.vertical(|ui| {
+                ui.heading("Mudel AI Connect");
+                ui.label(theme::muted("Conecta tus asignaturas con tu IA"));
+            });
+            theme::top_right(ui, |ui| {
+                ui.label(theme::muted(format!("v{}", env!("CARGO_PKG_VERSION"))));
+            });
+        });
+        ui.add_space(12.0);
+    }
+
+    fn update_notice(&self, ui: &mut egui::Ui) {
+        let Some(release) = &self.newer else { return };
+        theme::notice(ui, theme::MUTED, theme::CARD, |ui| {
+            ui.label(format!("Hay una versión nueva ({}).", release.version));
+            ui.hyperlink_to("Ver y descargar", &release.url);
+        });
+        ui.add_space(10.0);
+    }
+
+    fn campus_panel(&mut self, ui: &mut egui::Ui) {
+        theme::panel(ui, |ui| {
+            theme::section(ui, "Moodle");
+            let label = theme::field_label(ui, "Dirección");
+            ui.add(
+                egui::TextEdit::singleline(&mut self.url)
+                    .desired_width(f32::INFINITY)
+                    .margin(egui::Margin::symmetric(8, 6)),
+            )
+            .labelled_by(label.id);
+            ui.add_space(4.0);
+            let label = theme::field_label(ui, "Token de servicios web");
+            ui.add(
+                egui::TextEdit::singleline(&mut self.token)
+                    .password(true)
+                    .desired_width(f32::INFINITY)
+                    .margin(egui::Margin::symmetric(8, 6))
+                    .hint_text("Vacío: conservar la cuenta guardada para este campus"),
+            )
+            .labelled_by(label.id);
+            egui::CollapsingHeader::new("Cómo obtener el token").show(ui, |ui| {
+                ui.label("En Moodle: tu foto o nombre → Preferencias → Cuenta de usuario → Claves de seguridad. Copia el token de Servicios web, no el de RSS.");
+                ui.label("Si no aparece, pídelo al soporte del centro. Nunca introduzcas tu contraseña de Moodle aquí ni el token en un chat.");
+            });
+            ui.label(theme::muted(
+                "El token se guarda en el almacén seguro del sistema y solo se envía a tu Moodle.",
+            ));
+        });
+    }
+
+    fn apps_panel(&mut self, ui: &mut egui::Ui) {
+        theme::panel(ui, |ui| {
+            ui.horizontal(|ui| {
+                theme::section(ui, "Aplicaciones");
+                theme::right(ui, |ui| {
+                    if theme::link(ui, "Actualizar lista").clicked() {
+                        self.refresh();
+                    }
+                });
+            });
+            if self.rows.is_empty() {
+                ui.label(theme::muted(
+                    "Abre una vez Claude Desktop, Claude Code o Codex y actualiza la lista.",
+                ));
+            }
+            for row in &mut self.rows {
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut row.selected, &row.client.name);
+                    theme::right(ui, |ui| theme::status(ui, &row.state));
+                });
+                if !row.client.selected && row.client.key == "codex" {
+                    ui.label(theme::muted(
+                        "Ya tiene el plugin; no necesita otra conexión.",
+                    ));
+                }
+            }
+        });
+    }
+
+    fn actions(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let installed = self.paths.installed() || self.saved_account;
+        let title = if installed {
+            "Actualizar / reparar"
+        } else {
+            "Instalar"
+        };
+        ui.horizontal(|ui| {
+            if theme::secondary(ui, "Permisos").clicked() {
+                self.allowed = match installer::read_permissions(&self.paths) {
+                    Ok(values) => values,
+                    Err(error) => {
+                        self.fail(error);
+                        [false; 5]
+                    }
+                };
+                match installer::download_folder(&self.paths) {
+                    Ok(folder) => self.folder = folder,
+                    Err(error) => {
+                        self.folder = None;
+                        self.fail(error);
+                    }
+                }
+                self.preferences = true;
+            }
+            ui.add_enabled_ui(installed, |ui| {
+                if theme::danger(ui, "Desinstalar").clicked() {
+                    self.confirm_remove = true;
+                }
+            });
+            theme::right(ui, |ui| {
+                if theme::primary(ui, title).clicked() {
+                    self.install(ctx);
+                }
+            });
+        });
+    }
+
+    fn status(&self, ui: &mut egui::Ui, busy: bool) {
+        if busy {
+            ui.add_space(10.0);
+            theme::notice(ui, theme::MUTED, theme::CARD, |ui| {
+                ui.spinner();
+                ui.label(&self.message);
+            });
+            ui.label(theme::muted(
+                "Espera a que termine antes de cerrar la ventana.",
+            ));
+        } else if !self.message.is_empty() {
+            ui.add_space(10.0);
+            let (color, fill) = if self.error {
+                (theme::RED, theme::RED_SOFT)
+            } else {
+                (theme::GREEN, theme::GREEN_SOFT)
+            };
+            theme::notice(ui, color, fill, |ui| {
+                ui.label(&self.message);
+            });
+        }
+    }
+
+    fn footer(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, busy: bool) {
+        ui.add_space(12.0);
+        ui.horizontal_wrapped(|ui| {
+            ui.add_enabled_ui(!busy, |ui| {
+                if theme::link(ui, "Copiar diagnóstico").clicked() {
+                    ctx.copy_text(installer::diagnostics(&self.paths));
+                    self.message = "Diagnóstico copiado: no contiene el token.".into();
+                    self.error = false;
+                }
+            });
+            ui.label(theme::muted("·"));
+            if theme::link(ui, "Versiones y actualizaciones").clicked() {
+                ctx.open_url(egui::OpenUrl::new_tab(updates::RELEASES_PAGE));
+            }
+        });
+        ui.label(theme::muted(
+            "Proyecto independiente, sin relación con Moodle ni con tu universidad.",
+        ));
+    }
+
+    fn show_uninstall(&mut self, ctx: &egui::Context) {
+        egui::Window::new("Desinstalar Mudel AI Connect")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.set_max_width(400.0);
+                ui.label("Se borrarán el servidor y el token de esta instalación. Se conservarán tus permisos y la cuenta separada del plugin.");
+                ui.label(theme::muted("Cierra las aplicaciones de IA antes de continuar."));
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    if theme::danger(ui, "Desinstalar").clicked() {
+                        self.confirm_remove = false;
+                        let paths = self.paths.clone();
+                        self.start(ctx, move |_| installer::uninstall(&paths));
+                    }
+                    if theme::secondary(ui, "Cancelar").clicked() {
+                        self.confirm_remove = false;
+                    }
+                });
+            });
     }
 
     fn show_preferences(&mut self, ctx: &egui::Context, busy: bool) {
         let mut open = true;
-        egui::Window::new("Consultas permitidas").open(&mut open).collapsible(false).resizable(true)
-            .default_width(440.0).show(ctx, |ui| {
+        egui::Window::new("Consultas permitidas")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(true)
+            .default_width(440.0)
+            .show(ctx, |ui| {
                 ui.add_enabled_ui(!busy, |ui| {
                     ui.label("Elige qué puede consultar y descargar la IA en este equipo.");
-                    for (index, (_, label)) in installer::PERMISSIONS.iter().enumerate() { ui.checkbox(&mut self.allowed[index], *label); }
-                    ui.add_space(10.0);
-                    let folder = self.folder.clone().or_else(|| files::default_download_folder().ok());
-                    ui.label(format!("Descargas: {}", folder.map(|folder| folder.display().to_string()).unwrap_or_else(|| "no disponible".into())));
+                    ui.add_space(4.0);
+                    for (index, (_, label)) in installer::PERMISSIONS.iter().enumerate() {
+                        ui.checkbox(&mut self.allowed[index], *label);
+                    }
+                    ui.add_space(8.0);
+                    ui.separator();
+                    ui.add_space(4.0);
+                    theme::field_label(ui, "Carpeta de descargas");
+                    let folder = self
+                        .folder
+                        .clone()
+                        .or_else(|| files::default_download_folder().ok());
+                    ui.label(
+                        folder
+                            .map(|folder| folder.display().to_string())
+                            .unwrap_or_else(|| "no disponible".into()),
+                    );
                     ui.horizontal_wrapped(|ui| {
-                        if ui.button("Cambiar carpeta…").clicked() && let Some(folder) = rfd::FileDialog::new().set_title("Carpeta para las descargas").pick_folder() { self.folder = Some(folder); }
-                        if ui.button("Usar la predeterminada").clicked() { self.folder = None; }
+                        if theme::secondary(ui, "Cambiar carpeta…").clicked()
+                            && let Some(folder) = rfd::FileDialog::new()
+                                .set_title("Carpeta para las descargas")
+                                .pick_folder()
+                        {
+                            self.folder = Some(folder);
+                        }
+                        if theme::secondary(ui, "Usar la predeterminada").clicked() {
+                            self.folder = None;
+                        }
                     });
-                    ui.add_space(10.0);
-                    ui.label("Los permisos se aplican a las próximas consultas. El estado de conexión sigue disponible para diagnóstico.");
+                    ui.add_space(6.0);
+                    ui.label(theme::muted("Los permisos se aplican a las próximas consultas. El estado de conexión sigue disponible para diagnóstico."));
+                    ui.add_space(6.0);
                     ui.horizontal(|ui| {
-                        if ui.button("Guardar").clicked() {
-                            let paths = self.paths.clone(); let allowed = self.allowed; let folder = self.folder.clone();
+                        if theme::primary(ui, "Guardar").clicked() {
+                            let paths = self.paths.clone();
+                            let allowed = self.allowed;
+                            let folder = self.folder.clone();
                             self.preferences = false;
                             self.start(ctx, move |_| {
                                 installer::save_preferences(&paths, allowed, folder.as_deref())?;
                                 Ok("Permisos guardados. Se aplican a las próximas consultas.".into())
                             });
                         }
-                        if ui.button("Cancelar").clicked() { self.preferences = false; }
+                        if theme::secondary(ui, "Cancelar").clicked() {
+                            self.preferences = false;
+                        }
                     });
                 });
             });
@@ -341,6 +496,19 @@ impl Setup {
 impl eframe::App for Setup {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.show(ctx);
+    }
+}
+
+/// Ajusta la altura inicial a la pantalla para que quepa en portátiles pequeños.
+fn fit_to_screen(ctx: &egui::Context) {
+    static DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if DONE.load(std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
+    if let Some(monitor) = ctx.input(|input| input.viewport().monitor_size) {
+        DONE.store(true, std::sync::atomic::Ordering::Relaxed);
+        let height = (monitor.y * 0.88).clamp(480.0, 680.0);
+        ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(540.0, height)));
     }
 }
 
@@ -389,8 +557,8 @@ fn main() -> eframe::Result {
         }
     };
     let mut viewport = egui::ViewportBuilder::default()
-        .with_inner_size([600.0, 680.0])
-        .with_min_inner_size([440.0, 480.0]);
+        .with_inner_size([540.0, 680.0])
+        .with_min_inner_size([460.0, 480.0]);
     if let Ok(icon) = eframe::icon_data::from_png_bytes(LOGO) {
         viewport = viewport.with_icon(icon);
     }
@@ -402,15 +570,7 @@ fn main() -> eframe::Result {
             ..Default::default()
         },
         Box::new(move |cc| {
-            let mut visuals = egui::Visuals::light();
-            visuals.selection.bg_fill = PINK;
-            visuals.hyperlink_color = PINK;
-            visuals.panel_fill = Color32::WHITE;
-            cc.egui_ctx.set_visuals(visuals);
-            cc.egui_ctx.style_mut(|style| {
-                style.spacing.item_spacing = egui::vec2(10.0, 8.0);
-                style.spacing.button_padding = egui::vec2(14.0, 8.0);
-            });
+            theme::apply(&cc.egui_ctx);
             Ok(Box::new(Setup::new(paths, &cc.egui_ctx)))
         }),
     )
@@ -431,6 +591,7 @@ mod tests {
             macos: false,
         };
         let ctx = egui::Context::default();
+        theme::apply(&ctx);
         // Evita consultar el Llavero real al probar la vista.
         let mut setup = Setup {
             paths,
@@ -452,7 +613,7 @@ mod tests {
             }),
             logo: None,
         };
-        for size in [[440.0, 480.0], [600.0, 780.0]] {
+        for size in [[460.0, 560.0], [560.0, 800.0]] {
             let output = ctx.run(
                 egui::RawInput {
                     screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size.into())),
