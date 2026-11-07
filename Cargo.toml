@@ -40,9 +40,11 @@ toml_edit = { version = "0.25", optional = true }
 sha2 = { version = "0.10", optional = true }
 zip = { version = "9.4.1", default-features = false, features = ["deflate"] }
 quick-xml = "0.42.0"
+base64 = "0.23"
+md-5 = "0.10"
+getrandom = "0.4.3"
 
 [target.'cfg(windows)'.dependencies]
-base64 = "0.23"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_Shell", "Win32_System_Com", "Win32_Security_Cryptography"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]

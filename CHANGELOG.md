@@ -9,6 +9,9 @@
 - El token se guarda en el Llavero de macOS o cifrado con DPAPI en Windows, con cuentas
   separadas para el instalador y para el plugin.
 - La ventana avisa de versiones nuevas leyendo las releases públicas de GitHub.
+- Botón **Conectar con tu universidad** (solo Windows): abre la página oficial de acceso del
+  campus, inicias sesión allí (SSO y doble factor incluidos) y Mudel recibe el token y lo
+  guarda, sin ver nunca tu contraseña. Pendiente de probar con un inicio de sesión real.
 - `read_course_file` lee ahora Word (DOCX), PowerPoint (PPTX, con las notas del ponente) y
   Excel (XLSX), además de las páginas de Moodle. Los formatos antiguos (`.doc`, `.ppt`,
   `.xls`) se rechazan con un aviso claro.

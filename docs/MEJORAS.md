@@ -106,6 +106,17 @@ todo el tema 3»).
 - **Documentación a actualizar** al terminar: `src/instructions.txt`, la skill de estudio,
   la tabla de herramientas del README, `docs/DESARROLLO.md` y el CHANGELOG.
 
+## Conectar con tu universidad
+
+Botón en la ventana para obtener el token iniciando sesión en la página oficial del campus, sin
+escribir la clave a mano. Estado: **implementado en Windows; falta probarlo con un inicio de sesión
+real** (ver el detalle en `docs/DESARROLLO.md`).
+
+- Comprobado en tu campus: `launch.php` existe y redirige al login sin dar nada; ofrece acceso con
+  Office 365, Google y EduGain.
+- Pendiente: probarlo pulsando el botón, soporte para macOS y comprobar qué hace el campus si no
+  acepta el esquema `mudelai://`.
+
 ## No elegidas por ahora
 
 - OCR para PDF escaneados (alto esfuerzo y añade peso al instalador).

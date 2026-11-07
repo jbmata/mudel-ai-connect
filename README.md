@@ -21,7 +21,8 @@ Moodle Pty Ltd ni a ninguna universidad. Moodle es una marca registrada de Moodl
 
 Qué sale de tu PC:
 
-- **Tu token de Moodle** solo se envía a tu Moodle. La versión nativa lo guarda en el Llavero
+- **Tu token de Moodle** solo se envía a tu Moodle. Con «Conectar con tu universidad», Mudel registra
+  un enlace `mudelai://` solo mientras esperas el inicio de sesión y lo elimina al terminar. La versión nativa lo guarda en el Llavero
   de macOS o cifrado con tu usuario de Windows
   (DPAPI): no sirve si alguien copia el archivo a otro equipo ni lo pueden leer otros usuarios
   del PC, pero sí un programa que se ejecute con tu usuario. El programa nunca pide ni guarda
@@ -106,11 +107,18 @@ Ejemplos de uso:
 
 ## Clave de Moodle
 
+**En Windows, lo más cómodo es el botón «Conectar con tu universidad»**: se abre la página oficial
+de acceso de tu campus, inicias sesión allí (con el doble factor si lo pide) y Mudel recibe el
+token y lo guarda en el almacén seguro. Mudel nunca ve tu contraseña ni tu segundo factor. Usa
+el mismo mecanismo que la app oficial de Moodle, así que el campus debe tener activado el servicio
+móvil de Moodle (en SIFO es *Moodle mobile web service*). Si tu campus no lo permite, o no usas
+Windows, introduce el token a mano como se explica a continuación.
+
 Utiliza un token de servicios web autorizado por tu campus. Inicia sesión y abre
 **Tu foto o nombre → Preferencias → Cuenta de usuario → Claves de seguridad**.
 Copia el token de servicios web, no el de RSS. En SIFO, el servicio utilizado es
-**Moodle mobile web service**. El instalador incluye estos pasos en el desplegable
-**Cómo obtener el token**.
+**Moodle mobile web service**. El instalador incluye estos pasos con el enlace
+«¿Cómo lo consigo?».
 
 Introdúcelo en el instalador local o en el terminal de configuración del plugin.
 No lo pegues en el chat ni lo incluyas en un paquete o en el repositorio.

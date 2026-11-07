@@ -3,11 +3,12 @@
 use std::{
     path::PathBuf,
     sync::mpsc::{self, Receiver},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use eframe::egui;
 use mudel_ai_connect_server::{
+    connect::{self, Attempt},
     credentials::{self, Kind},
     files,
     installer::{self, Client, Paths},
@@ -18,6 +19,14 @@ use mudel_ai_connect_server::{
 mod theme;
 
 const LOGO: &[u8] = include_bytes!("../assets/logo-setup.png");
+/// Tiempo máximo para iniciar sesión en el navegador.
+const LOGIN_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+
+/// Inicio de sesión en curso: espera la respuesta del navegador.
+struct Login {
+    attempt: Attempt,
+    started: Instant,
+}
 
 enum Event {
     Progress(String),
@@ -41,6 +50,7 @@ struct Setup {
     preferences: bool,
     confirm_remove: bool,
     token_help: bool,
+    login: Option<Login>,
     message: String,
     error: bool,
     task: Option<Receiver<Event>>,
@@ -72,6 +82,7 @@ impl Setup {
             preferences: false,
             confirm_remove: false,
             token_help: false,
+            login: None,
             message: String::new(),
             error: false,
             task: None,
@@ -167,7 +178,64 @@ impl Setup {
         });
     }
 
+    /// Empieza el inicio de sesión en el navegador con la página oficial del campus.
+    fn start_login(&mut self, ctx: &egui::Context) {
+        let attempt = match Attempt::new(&self.url) {
+            Ok(attempt) => attempt,
+            Err(error) => return self.fail(error),
+        };
+        let registered = std::env::current_exe()
+            .map_err(|_| "No se encontró este programa para recibir la respuesta.".to_string())
+            .and_then(|exe| connect::register(connect::SCHEME, &exe));
+        if let Err(error) = registered {
+            return self.fail(error);
+        }
+        ctx.open_url(egui::OpenUrl::new_tab(attempt.launch_url()));
+        self.url = attempt.base_url().to_string();
+        self.login = Some(Login {
+            attempt,
+            started: Instant::now(),
+        });
+        self.error = false;
+        self.message = "Inicia sesión en la ventana del navegador. Aquí se continuará solo.".into();
+    }
+
+    fn cancel_login(&mut self) {
+        if self.login.take().is_some() {
+            connect::unregister(connect::SCHEME);
+        }
+    }
+
+    fn poll_login(&mut self, ctx: &egui::Context) {
+        let Some(login) = self.login.take() else {
+            return;
+        };
+        if login.started.elapsed() > LOGIN_TIMEOUT {
+            connect::unregister(connect::SCHEME);
+            return self
+                .fail("Se agotó el tiempo para iniciar sesión. Vuelve a intentarlo.".into());
+        }
+        match connect::take_callback(&self.paths.data) {
+            None => {
+                self.login = Some(login);
+                ctx.request_repaint_after(Duration::from_millis(400));
+            }
+            Some(callback) => {
+                connect::unregister(connect::SCHEME);
+                match login.attempt.accept(&callback) {
+                    Ok(token) => {
+                        self.token = token;
+                        self.url = login.attempt.base_url().to_string();
+                        self.install(ctx);
+                    }
+                    Err(error) => self.fail(error),
+                }
+            }
+        }
+    }
+
     fn poll(&mut self, ctx: &egui::Context) {
+        self.poll_login(ctx);
         if let Some(receiver) = &self.update_check {
             match receiver.try_recv() {
                 Ok(found) => {
@@ -222,7 +290,7 @@ impl Setup {
             self.header(ui);
             self.update_notice(ui);
             ui.add_enabled_ui(!busy && !self.confirm_remove, |ui| {
-                self.campus_panel(ui);
+                self.campus_panel(ui, ctx);
                 ui.add_space(10.0);
                 self.apps_panel(ui);
             });
@@ -286,7 +354,7 @@ impl Setup {
         ui.add_space(10.0);
     }
 
-    fn campus_panel(&mut self, ui: &mut egui::Ui) {
+    fn campus_panel(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         theme::panel(ui, |ui| {
             theme::section(ui, "Moodle");
             let label = theme::field_label(ui, "Dirección");
@@ -296,8 +364,45 @@ impl Setup {
                     .margin(egui::Margin::symmetric(8, 6)),
             )
             .labelled_by(label.id);
+            if connect::SUPPORTED {
+                ui.add_space(6.0);
+                if self.login.is_none() {
+                    if theme::secondary(ui, "Conectar con tu universidad").clicked() {
+                        self.start_login(ctx);
+                    }
+                    ui.label(theme::muted(
+                        "Inicias sesión en tu campus; Mudel no ve tu contraseña.",
+                    ));
+                } else {
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label("Esperando el inicio de sesión en el navegador…");
+                        if theme::link(ui, "Cancelar").clicked() {
+                            self.cancel_login();
+                            self.message.clear();
+                        }
+                    });
+                }
+            }
             ui.add_space(4.0);
-            let label = theme::field_label(ui, "Token de servicios web");
+            let label = ui
+                .horizontal(|ui| {
+                    let label = theme::field_label(
+                        ui,
+                        if connect::SUPPORTED {
+                            "O introduce el token a mano (se guarda cifrado)"
+                        } else {
+                            "Token de servicios web (se guarda cifrado)"
+                        },
+                    );
+                    theme::right(ui, |ui| {
+                        if theme::link(ui, "¿Cómo lo consigo?").clicked() {
+                            self.token_help = true;
+                        }
+                    });
+                    label
+                })
+                .inner;
             ui.add(
                 egui::TextEdit::singleline(&mut self.token)
                     .password(true)
@@ -306,16 +411,6 @@ impl Setup {
                     .hint_text("Vacío: conservar la cuenta guardada para este campus"),
             )
             .labelled_by(label.id);
-            ui.horizontal(|ui| {
-                ui.label(theme::muted(
-                    "Se guarda cifrado y solo se envía a tu Moodle.",
-                ));
-                theme::right(ui, |ui| {
-                    if theme::link(ui, "¿Cómo lo consigo?").clicked() {
-                        self.token_help = true;
-                    }
-                });
-            });
         });
     }
 
@@ -514,6 +609,12 @@ impl Setup {
     }
 }
 
+impl Drop for Setup {
+    fn drop(&mut self) {
+        self.cancel_login();
+    }
+}
+
 impl eframe::App for Setup {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.show(ctx);
@@ -549,6 +650,22 @@ fn main() -> eframe::Result {
             }
         }
     }
+    // El navegador lanza otra copia con la respuesta del campus: se la entrega a la ventana
+    // que espera y termina.
+    if let [_, callback] = std::env::args().collect::<Vec<_>>().as_slice()
+        && callback.to_ascii_lowercase().starts_with("mudelai://")
+    {
+        let delivered = connect::callback_directory()
+            .and_then(|directory| connect::hand_over(&directory, callback));
+        if let Err(error) = delivered {
+            rfd::MessageDialog::new()
+                .set_title("Mudel AI Connect")
+                .set_description(&error)
+                .set_level(rfd::MessageLevel::Error)
+                .show();
+        }
+        return Ok(());
+    }
     if std::env::args().len() != 1 {
         eprintln!("Uso: mudel-ai-connect-setup [--package-check]");
         std::process::exit(1);
@@ -565,7 +682,7 @@ fn main() -> eframe::Result {
         }
     };
     let mut viewport = egui::ViewportBuilder::default()
-        .with_inner_size([540.0, 640.0])
+        .with_inner_size([540.0, 672.0])
         .with_resizable(false)
         .with_maximize_button(false);
     if let Ok(icon) = eframe::icon_data::from_png_bytes(LOGO) {
@@ -613,6 +730,7 @@ mod tests {
             preferences: true,
             confirm_remove: true,
             token_help: true,
+            login: None,
             message: "Prueba".into(),
             error: false,
             task: None,
