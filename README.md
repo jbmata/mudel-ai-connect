@@ -7,8 +7,8 @@ leen, y la de descarga solo guarda archivos en tu carpeta Descargas.
 
 Aplicación nativa para Windows y macOS con Apple Silicon, escrita en Rust y sin
 necesidad de Python: ventana de instalación, servidor MCP y plugin.
-Las versiones v0.1 y v0.2, escritas en Python, siguen en sus
-[releases](https://github.com/jbmata/mudel-ai-connect/releases).
+Las versiones v0.1 y v0.2, escritas en Python, ya no se publican; su código sigue en el
+historial de git (etiquetas `v0.1.0` y `v0.2.0`).
 
 El flujo es: **pregunta → IA + skill → MCP → Moodle → respuesta con fuentes**.
 La IA consulta los datos cuando los necesita; no carga todo el campus en cada
@@ -42,8 +42,8 @@ Los cambios de cada versión y sus límites conocidos están en [CHANGELOG.md](C
 
 ## Instalar
 
-Descarga los paquetes de las [releases](https://github.com/jbmata/mudel-ai-connect/releases)
-(o los artefactos `mudel-native-*` del workflow Tests de GitHub Actions):
+Todavía no hay una release publicada. Los paquetes están en los artefactos `mudel-native-*` del
+workflow Tests de GitHub Actions, o se generan con `scripts/package.ps1`:
 
 - **Windows:** abre `Mudel-AI-Connect-Setup.exe`.
 - **Mac con Apple Silicon:** extrae `Mudel-AI-Connect-Setup-macos-aarch64.zip` y abre
