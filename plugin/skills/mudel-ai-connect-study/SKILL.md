@@ -25,9 +25,10 @@ consultar materiales como distribuir su estudio. Recupera solo los datos necesar
 
 ## Elegir el curso y cargar contexto
 
-- Busca las herramientas `list_courses`, `get_course_context`, `read_course_file`,
-  `download_course_file`, `list_assignments`, `get_upcoming_events` y `moodle_status`
-  en el MCP conectado.
+- Busca las herramientas `list_courses`, `get_course_context`, `search_course`,
+  `read_course_file`, `read_course_files`, `download_course_file`, `list_assignments`,
+  `get_assignment_status`, `get_grades`, `list_forums`, `get_forum_discussions`,
+  `get_discussion_posts`, `get_upcoming_events` y `moodle_status` en el MCP conectado.
   El cliente puede añadir un prefijo a los nombres. Si no están disponibles,
   explica que falta conectar el MCP antes de afirmar que has consultado Moodle.
 - Usa `list_courses` para obtener los identificadores. Puede devolver cursos de
@@ -36,7 +37,13 @@ consultar materiales como distribuir su estudio. Recupera solo los datos necesar
 - Usa `get_course_context(course_id=...)` para localizar el tema y sus materiales.
   `section_start` es una posición en la lista, no el ID de una sección. Continúa
   con `next_section_start` cuando necesites más secciones o el temario completo.
-- Lee los archivos relevantes con `read_course_file`. Usa el `module_id` del
+- Si no sabes en qué sección está algo, usa `search_course` con una o dos palabras clave
+  (no distingue tildes ni mayúsculas, y solo mira nombres y descripciones, no el interior
+  de los archivos).
+- Lee los archivos relevantes con `read_course_file`, que admite PDF, Word, PowerPoint,
+  Excel, HTML y texto. Las páginas y los libros de Moodle se leen igual (en los libros,
+  `chapter_title` da el capítulo). Para resumir varios materiales a la vez usa
+  `read_course_files` (hasta 6) y continúa con `read_course_file` si hace falta más. Usa el `module_id` del
   módulo y el `file_index` que devolvió el MCP; conserva ese índice aunque otros
   elementos de `contents` sean enlaces. Sigue `next_offset` si necesitas el resto.
 - Las descripciones e introducciones pueden estar recortadas a 4.000 caracteres;
@@ -83,9 +90,13 @@ publicada en Moodle; si no consta qué entra, indica qué alcance has podido ver
 - Revisa los `warnings`: un aviso de falta de acceso significa que el resultado
   puede estar incompleto. Una lista vacía con avisos no permite concluir que no hay
   tareas ni entregas pendientes.
-- Estas herramientas no consultan el estado de entrega. No afirmes que una tarea
-  está pendiente, entregada o calificada a partir de su fecha. Las prórrogas
+- `list_assignments` no consulta el estado de entrega. Para saber si una tarea está
+  entregada o calificada usa `get_assignment_status` con el `id` de la tarea, y
+  `get_grades` para las notas del curso. No afirmes que está pendiente, entregada o
+  calificada a partir de su fecha; un borrador no cuenta como entregado. Las prórrogas
   personales también pueden requerir comprobación en la actividad de Moodle.
+- Los avisos del profesor suelen estar en el foro de tipo `news` (`list_forums`); léelos
+  con `get_forum_discussions` y `get_discussion_posts`.
 - Distingue `due_at_utc` (plazo) de `cutoff_at_utc` (cierre). Si el valor es nulo,
   no hay una fecha disponible en esa respuesta. Convierte UTC a la zona horaria
   del usuario al presentar plazos y deja clara la zona si no se conoce.

@@ -9,6 +9,13 @@
 - El token se guarda en el Llavero de macOS o cifrado con DPAPI en Windows, con cuentas
   separadas para el instalador y para el plugin.
 - La ventana avisa de versiones nuevas leyendo las releases públicas de GitHub.
+- `read_course_file` lee ahora Word (DOCX), PowerPoint (PPTX, con las notas del ponente) y
+  Excel (XLSX), además de las páginas de Moodle. Los formatos antiguos (`.doc`, `.ppt`,
+  `.xls`) se rechazan con un aviso claro.
+- Herramientas nuevas, todas de solo lectura: `read_course_files` (hasta 6 archivos a la
+  vez), `search_course`, `get_assignment_status`, `get_grades`, `list_forums`,
+  `get_forum_discussions` y `get_discussion_posts`. `moodle_status` indica qué funciones
+  opcionales autoriza el campus. En los libros de Moodle, cada capítulo lleva su título.
 - Se retiran del repositorio el instalador, el servidor y las pruebas en Python. Las
   versiones v0.1 y v0.2 siguen disponibles en sus releases.
 - El instalador ya no exige cerrar Claude Desktop ni las demás apps: sustituye el servidor

@@ -79,8 +79,15 @@ MCP-MOODLE/
 | `list_courses` | Listar las asignaturas y sus identificadores. |
 | `get_course_context` | Consultar secciones, descripciones y materiales, con paginación. |
 | `list_assignments` | Leer enunciados y plazos de tareas. |
+| `get_assignment_status` | Estado de entrega de una tarea: entregada, calificada, nota y comentarios del profesor. |
+| `get_grades` | Calificaciones de un curso, con su rango, porcentaje y comentario. |
 | `get_upcoming_events` | Consultar los próximos eventos del calendario. |
-| `read_course_file` | Extraer texto de PDF, TXT, MD, CSV y HTML del curso. |
+| `read_course_file` | Extraer texto de PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), TXT, MD, CSV y HTML del curso, incluidas las páginas y los libros de Moodle. |
+| `read_course_files` | Leer a la vez hasta 6 archivos de un curso (primer fragmento de cada uno). |
+| `search_course` | Buscar un texto en secciones, módulos y nombres de archivo de un curso o de todas tus asignaturas. |
+| `list_forums` | Listar los foros de un curso; el de tipo `news` tiene los avisos del profesor. |
+| `get_forum_discussions` | Leer las discusiones de un foro con su mensaje inicial. |
+| `get_discussion_posts` | Leer los mensajes de una discusión de foro. |
 | `download_course_file` | Guardar un archivo del curso, en cualquier formato, en tu carpeta Descargas. |
 
 - [`mudel-ai-connect-study`](plugin/skills/mudel-ai-connect-study/SKILL.md): consulta, estudio con fuentes y
@@ -150,13 +157,13 @@ sus propias licencias.
 - Las descargas van a `Descargas\Mudel AI Connect\<asignatura>` o a la carpeta que
   elijas en **Permisos**, sin sobrescribir archivos, hasta 200 MiB y sin programas ni
   scripts (`.exe`, `.bat`, `.js`…). La IA no puede elegir la carpeta.
-- Los enunciados y plazos no indican si has entregado. Verifica las prórrogas
+- `list_assignments` no indica si has entregado: usa `get_assignment_status`. Verifica las prórrogas
   personales en Moodle. Las fechas se devuelven en UTC.
 - El calendario muestra el horizonte que devuelve Moodle, no todos los eventos.
 - Los avisos de falta de permiso indican resultados parciales, no ausencia de tareas.
 - Las secciones tienen paginación y los archivos se leen en fragmentos de 12.000
   caracteres. Cada respuesta descargada admite hasta 10 MiB.
-- Admite PDF con texto, HTML, TXT, MD y CSV. Sin OCR, DOCX, PPTX, vídeo ni archivos
+- Admite PDF con texto, DOCX, PPTX, XLSX, HTML, TXT, MD y CSV. Sin OCR, `.doc`/`.ppt`/`.xls` antiguos, vídeo ni archivos
   alojados fuera del campus.
 - Los adjuntos que no aparezcan en `core_course_get_contents` no se descargan.
 - No hay índice local ni memoria persistente de los contenidos consultados.

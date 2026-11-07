@@ -7,7 +7,7 @@ Las versiones v0.1 y v0.2 estaban escritas en Python; siguen disponibles en sus
 conserva la compatibilidad con sus cuentas y preferencias guardadas.
 Los paquetes siguen siendo experimentales hasta publicarlos firmados.
 
-Ya están portadas las siete herramientas `moodle_status`, `list_courses`,
+Ya están portadas las siete herramientas originales `moodle_status`, `list_courses`,
 `get_course_context`, `list_assignments`, `get_upcoming_events`, `read_course_file`
 y `download_course_file`, y el prompt `estudiar_curso`, usando el
 [SDK oficial de MCP para Rust](https://github.com/modelcontextprotocol/rust-sdk).
@@ -192,7 +192,7 @@ Las respuestas ocultan los tokens y no propagan los mensajes del servidor en err
 
 ## Archivos
 
-`read_course_file` admite PDF con texto, HTML, TXT, MD y CSV. Devuelve fragmentos de
+`read_course_file` admite PDF con texto, DOCX, PPTX, XLSX, HTML, TXT, MD y CSV. Devuelve fragmentos de
 12.000 caracteres con `next_offset`. Rechaza PDF cifrados o sin texto extraíble;
 no incorpora OCR. Los adjuntos deben pertenecer al curso y al mismo campus, por el
 endpoint `webservice/pluginfile.php`; el token viaja en el cuerpo POST.
@@ -212,11 +212,36 @@ se marcan con `Zone.Identifier` en Windows y `com.apple.quarantine` en macOS.
 Si el sistema de archivos no permite esa marca, el resultado incluye un aviso.
 La herramienta no abre ni ejecuta los archivos descargados.
 
+## Herramientas añadidas después de la migración
+
+Todas son de solo lectura y usan las cinco categorías de permisos que ya existían: no se
+añadieron categorías porque el archivo de permisos se valida con exactamente esas cinco.
+
+| Herramienta | Permiso | Función de Moodle |
+| --- | --- | --- |
+| `read_course_file` con Office | Materiales | `src/office.rs` (DOCX, PPTX y XLSX, que son ZIP con XML) |
+| `read_course_files` | Materiales | Una sola consulta de contenidos para hasta 6 archivos |
+| `search_course` | Materiales | Filtra `core_course_get_contents`; en todos los cursos consulta de 6 en 6 |
+| `get_assignment_status` | Tareas | `mod_assign_get_submission_status` |
+| `get_grades` | Tareas | `gradereport_user_get_grade_items` |
+| `list_forums`, `get_forum_discussions`, `get_discussion_posts` | Materiales | `mod_forum_get_forums_by_courses`, `mod_forum_get_forum_discussions`, `mod_forum_get_discussion_posts` |
+
+Las cinco funciones de la segunda mitad son **opcionales**: `moodle_status` informa en
+`optional_available_functions` y `optional_missing_functions` de cuáles autoriza el campus.
+
+La lectura de Office limita lo que descomprime (64 MiB por parte, 160 MiB en total y 20.000
+entradas) para resistir «bombas ZIP». Las fechas de Excel salen como número de serie, porque no
+se aplica el formato de la celda. Los libros de Moodle (`mod_book`) añaden `chapter_title` a cada
+capítulo en `get_course_context`; no se ha podido probar con un libro real porque el campus de
+pruebas no tiene ninguno, solo con datos de ejemplo.
+
 ## Validación antes de publicar
 
 Comprobado con un campus real (SIFO de Comillas, Windows): `--check` y las herramientas
 `moodle_status`, `list_courses`, `get_course_context`, `list_assignments`,
-`get_upcoming_events` y `read_course_file` por una sesión MCP real. Los avisos
+`get_upcoming_events` y `read_course_file` por una sesión MCP real. Después se comprobaron
+la lectura de un `.docx`, un `.pptx` y un `.xlsx` reales, `read_course_files`, `search_course`,
+`get_assignment_status`, `get_grades` y los foros (con un foro de avisos con mensajes). Los avisos
 «No access rights in module context» de `list_assignments` son respuestas normales de
 Moodle para módulos ocultos.
 

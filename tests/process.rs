@@ -235,12 +235,19 @@ fn real_process_discovers_tools_and_rejects_invalid_calls() {
         names,
         [
             "download_course_file",
+            "get_assignment_status",
             "get_course_context",
+            "get_discussion_posts",
+            "get_forum_discussions",
+            "get_grades",
             "get_upcoming_events",
             "list_assignments",
             "list_courses",
+            "list_forums",
             "moodle_status",
             "read_course_file",
+            "read_course_files",
+            "search_course",
         ]
     );
     for tool in tools {
@@ -268,6 +275,14 @@ fn real_process_discovers_tools_and_rejects_invalid_calls() {
             json!({"course_id": 7, "section_limit": 11}),
         ),
         ("list_assignments", json!({"course_id": 0})),
+        ("get_assignment_status", json!({"assignment_id": 0})),
+        ("get_grades", json!({"course_id": -1})),
+        ("list_forums", json!({"course_id": 0})),
+        ("get_forum_discussions", json!({"forum_id": 0})),
+        ("get_discussion_posts", json!({"discussion_id": -3})),
+        ("search_course", json!({"query": "a"})),
+        ("search_course", json!({"query": "tema", "course_id": 0})),
+        ("read_course_files", json!({"course_id": 7, "files": []})),
         ("read_course_file", json!({"course_id": 7, "module_id": -1})),
         (
             "download_course_file",

@@ -12,6 +12,14 @@ pub const FUNCTIONS: [&str; 5] = [
     "mod_assign_get_assignments",
     "core_calendar_get_calendar_upcoming_view",
 ];
+/// Funciones de consulta adicionales: no todos los campus las autorizan, así que son opcionales.
+pub const OPTIONAL_FUNCTIONS: [&str; 5] = [
+    "mod_assign_get_submission_status",
+    "gradereport_user_get_grade_items",
+    "mod_forum_get_forums_by_courses",
+    "mod_forum_get_forum_discussions",
+    "mod_forum_get_discussion_posts",
+];
 pub const MAX_BYTES: usize = 10 * 1024 * 1024;
 const NETWORK_ERROR: &str =
     "No se pudo consultar Moodle. Comprueba la conexión, la URL y los permisos del token.";
@@ -42,9 +50,25 @@ impl MoodleClient {
             .filter(|name| !available.contains(name))
             .collect();
         missing.sort_unstable();
+        let names: Vec<_> = optional_array(&info, "functions")?
+            .iter()
+            .filter_map(|entry| entry["name"].as_str())
+            .collect();
+        let mut optional_available: Vec<&str> = Vec::new();
+        let mut optional_missing: Vec<&str> = Vec::new();
+        for name in OPTIONAL_FUNCTIONS {
+            if names.contains(&name) {
+                optional_available.push(name);
+            } else {
+                optional_missing.push(name);
+            }
+        }
+        optional_available.sort_unstable();
+        optional_missing.sort_unstable();
         Ok(self.clean(json!({
             "site": info["sitename"], "url": self.base_url, "user": info["fullname"],
             "user_id": info["userid"], "available_functions": available, "missing_functions": missing,
+            "optional_available_functions": optional_available, "optional_missing_functions": optional_missing,
             "file_download_enabled": info["downloadfiles"]
         })))
     }
@@ -65,7 +89,7 @@ impl MoodleClient {
     }
 
     pub async fn call(&self, function: &str, params: &[(&str, String)]) -> Result<Value, String> {
-        if !FUNCTIONS.contains(&function) {
+        if !FUNCTIONS.contains(&function) && !OPTIONAL_FUNCTIONS.contains(&function) {
             return Err("Esta función no está permitida por el MCP de consulta.".into());
         }
         let mut form = params.to_vec();
@@ -199,19 +223,22 @@ impl MoodleClient {
             .await
     }
 
-    pub async fn course_file(
-        &self,
-        course_id: i64,
+    /// Contenidos del curso tal como los devuelve Moodle (secciones con módulos).
+    pub async fn course_sections(&self, course_id: i64) -> Result<Value, String> {
+        if course_id <= 0 {
+            return Err("course_id debe ser positivo.".into());
+        }
+        self.call(FUNCTIONS[2], &[("courseid", course_id.to_string())])
+            .await
+    }
+
+    /// Busca un archivo descargable dentro de las secciones ya consultadas.
+    pub fn find_file(
+        sections: &Value,
         module_id: i64,
         file_index: u64,
     ) -> Result<(Value, Value), String> {
-        if course_id <= 0 || module_id <= 0 {
-            return Err("course_id y module_id deben ser positivos.".into());
-        }
-        let sections = self
-            .call(FUNCTIONS[2], &[("courseid", course_id.to_string())])
-            .await?;
-        for section in array(&sections)? {
+        for section in array(sections)? {
             for module in optional_array(section, "modules")? {
                 if module["id"].as_i64() != Some(module_id) {
                     continue;
@@ -229,6 +256,19 @@ impl MoodleClient {
             }
         }
         Err("No se encontró ese módulo o índice de archivo en el curso accesible.".into())
+    }
+
+    pub async fn course_file(
+        &self,
+        course_id: i64,
+        module_id: i64,
+        file_index: u64,
+    ) -> Result<(Value, Value), String> {
+        if course_id <= 0 || module_id <= 0 {
+            return Err("course_id y module_id deben ser positivos.".into());
+        }
+        let sections = self.course_sections(course_id).await?;
+        Self::find_file(&sections, module_id, file_index)
     }
 
     fn parse_response(&self, body: &[u8], function: &str) -> Result<Value, String> {

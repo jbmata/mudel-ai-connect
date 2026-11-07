@@ -153,7 +153,7 @@ async fn read_rejects_html_logins_json_errors_and_oversized_files() {
         );
         handle.join().unwrap();
     }
-    for (name, size) in [("apuntes.txt", MAX_BYTES as u64 + 1), ("apuntes.docx", 1)] {
+    for (name, size) in [("apuntes.txt", MAX_BYTES as u64 + 1), ("apuntes.ppt", 1)] {
         let (client, requests, handle) = mock_with(|base| {
             vec![response(200, &sections(base, name, size).to_string()).into_bytes()]
         });
@@ -440,4 +440,154 @@ fn missing_or_invalid_chosen_folders_fall_back_without_creating_them() {
     }
     assert!(!directory.path().join("USB ausente").exists());
     assert!(default_download_folder().unwrap().is_absolute());
+}
+
+fn word_document(text: &str) -> Vec<u8> {
+    use std::io::{Cursor, Write as _};
+    let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    writer
+        .start_file(
+            "word/document.xml",
+            zip::write::SimpleFileOptions::default(),
+        )
+        .unwrap();
+    writer
+        .write_all(
+            format!(
+                r#"<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>{text}</w:t></w:r></w:p></w:body></w:document>"#
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    writer.finish().unwrap().into_inner()
+}
+
+#[tokio::test]
+async fn word_documents_are_read_through_the_download_path() {
+    let body = word_document("Apuntes del tema 1");
+    let (client, _requests, handle) = mock_with(|base| {
+        vec![
+            response(
+                200,
+                &sections(base, "apuntes.docx", body.len() as u64).to_string(),
+            )
+            .into_bytes(),
+            binary(
+                &body,
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ),
+        ]
+    });
+    let result = read(&client, read_file(0)).await.unwrap();
+    assert_eq!(result["text"], "Apuntes del tema 1");
+    assert_eq!(result["filename"], "apuntes.docx");
+    handle.join().unwrap();
+}
+
+#[tokio::test]
+async fn an_office_login_page_or_legacy_format_is_rejected_clearly() {
+    // La respuesta de un inicio de sesión no es un ZIP.
+    let (client, _requests, handle) = mock_with(|base| {
+        vec![
+            response(200, &sections(base, "apuntes.xlsx", 20).to_string()).into_bytes(),
+            binary(b"<html>Login</html>", "text/html"),
+        ]
+    });
+    assert!(
+        read(&client, read_file(0))
+            .await
+            .unwrap_err()
+            .contains("no es un documento de Office")
+    );
+    handle.join().unwrap();
+    // Un .ppt antiguo se rechaza sin descargar nada.
+    let (client, requests, handle) = mock_with(|base| {
+        vec![response(200, &sections(base, "viejo.ppt", 20).to_string()).into_bytes()]
+    });
+    let error = read(&client, read_file(0)).await.unwrap_err();
+    assert!(error.contains(".pptx"), "{error}");
+    assert_eq!(requests.try_iter().count(), 1);
+    handle.join().unwrap();
+}
+
+#[tokio::test]
+async fn several_files_are_read_with_one_listing_and_failures_do_not_cancel_the_rest() {
+    let word = word_document("Primero");
+    let (client, requests, handle) = mock_with(|base| {
+        let listing = json!([{"id": 1, "modules": [
+            {"id": 90, "url": format!("{base}/mod/resource/view.php?id=90"), "contents": [{
+                "type": "file", "filename": "uno.docx", "filesize": word.len(),
+                "fileurl": format!("{base}/webservice/pluginfile.php/42/content/uno.docx")}]},
+            {"id": 91, "url": format!("{base}/mod/resource/view.php?id=91"), "contents": [{
+                "type": "file", "filename": "dos.txt", "filesize": 6,
+                "fileurl": format!("{base}/webservice/pluginfile.php/42/content/dos.txt")}]}
+        ]}]);
+        vec![
+            response(200, &listing.to_string()).into_bytes(),
+            binary(&word, "application/octet-stream"),
+            binary(b"Segundo", "text/plain"),
+        ]
+    });
+    let result = read_many(
+        &client,
+        ReadFiles {
+            course_id: 7,
+            files: vec![
+                BatchFile {
+                    module_id: 90,
+                    file_index: 0,
+                },
+                BatchFile {
+                    module_id: 999,
+                    file_index: 0,
+                },
+                BatchFile {
+                    module_id: 91,
+                    file_index: 0,
+                },
+            ],
+        },
+    )
+    .await
+    .unwrap();
+    let results = result["results"].as_array().unwrap();
+    assert_eq!(results.len(), 3);
+    assert_eq!(results[0]["ok"], true);
+    assert_eq!(results[0]["text"], "Primero");
+    assert_eq!(results[1]["ok"], false);
+    assert!(
+        results[1]["error"]
+            .as_str()
+            .unwrap()
+            .contains("No se encontró")
+    );
+    assert_eq!(results[2]["text"], "Segundo");
+    // Un único listado del curso y dos descargas (el módulo inexistente no descarga).
+    assert_eq!(requests.try_iter().count(), 3);
+    handle.join().unwrap();
+
+    for files in [
+        vec![],
+        (0..7)
+            .map(|_| BatchFile {
+                module_id: 90,
+                file_index: 0,
+            })
+            .collect(),
+    ] {
+        let (client, requests, handle) = mock_with(|_| vec![]);
+        assert!(
+            read_many(
+                &client,
+                ReadFiles {
+                    course_id: 7,
+                    files
+                }
+            )
+            .await
+            .is_err()
+        );
+        assert_eq!(requests.try_iter().count(), 0);
+        handle.join().unwrap();
+    }
 }

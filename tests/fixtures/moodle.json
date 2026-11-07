@@ -197,6 +197,14 @@
         "mod_assign_get_assignments"
       ],
       "missing_functions": [],
+      "optional_available_functions": [],
+      "optional_missing_functions": [
+        "gradereport_user_get_grade_items",
+        "mod_assign_get_submission_status",
+        "mod_forum_get_discussion_posts",
+        "mod_forum_get_forum_discussions",
+        "mod_forum_get_forums_by_courses"
+      ],
       "file_download_enabled": 1
     },
     "list_courses": {
@@ -325,7 +333,7 @@
         }
       ],
       "warnings": [],
-      "note": "Plazos devueltos por Moodle; no se ha consultado el estado de entrega. Verifica posibles prórrogas personales en SIFO."
+      "note": "Plazos devueltos por Moodle; no se ha consultado el estado de entrega (usa get_assignment_status con el id de la tarea). Verifica posibles prórrogas personales en SIFO."
     },
     "get_upcoming_events": {
       "events": [

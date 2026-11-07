@@ -11,8 +11,13 @@ use tempfile::NamedTempFile;
 use unicode_normalization::UnicodeNormalization;
 
 use crate::moodle::{FORMAT_ERROR, MAX_BYTES, MoodleClient, text};
+use crate::office;
 
 const MAX_DOWNLOAD_BYTES: usize = 200 * 1024 * 1024;
+/// Caracteres que devuelve cada lectura, y cada archivo cuando se leen varios a la vez.
+const READ_CHARS: usize = 12000;
+const BATCH_CHARS: usize = 6000;
+pub const MAX_BATCH: usize = 6;
 const SAVE_ERROR: &str = "No se pudo guardar el archivo en la carpeta de descargas.";
 const DOWNLOAD_ERROR: &str = "Moodle devolvió un error al descargar. Comprueba el permiso de descarga de archivos del servicio.";
 
@@ -40,20 +45,81 @@ pub struct ReadFile {
     pub offset: u64,
 }
 
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BatchFile {
+    #[schemars(range(min = 1))]
+    pub module_id: i64,
+    #[serde(default)]
+    pub file_index: u64,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ReadFiles {
+    #[schemars(range(min = 1))]
+    pub course_id: i64,
+    #[schemars(length(min = 1, max = 6))]
+    pub files: Vec<BatchFile>,
+}
+
 pub async fn read(client: &MoodleClient, params: ReadFile) -> Result<Value, String> {
     let (module, item) = client
         .course_file(params.course_id, params.module_id, params.file_index)
         .await?;
+    read_item(client, &module, &item, params.offset, READ_CHARS).await
+}
+
+/// Lee varios archivos de un mismo curso con una sola consulta de contenidos.
+/// Un archivo que falle no cancela los demás: su resultado lleva el error.
+pub async fn read_many(client: &MoodleClient, params: ReadFiles) -> Result<Value, String> {
+    if params.files.is_empty() || params.files.len() > MAX_BATCH {
+        return Err(format!("Indica entre 1 y {MAX_BATCH} archivos."));
+    }
+    let sections = client.course_sections(params.course_id).await?;
+    let mut results = Vec::new();
+    for request in &params.files {
+        let outcome =
+            match MoodleClient::find_file(&sections, request.module_id, request.file_index) {
+                Ok((module, item)) => read_item(client, &module, &item, 0, BATCH_CHARS).await,
+                Err(error) => Err(error),
+            };
+        results.push(match outcome {
+            Ok(mut value) => {
+                value["module_id"] = json!(request.module_id);
+                value["file_index"] = json!(request.file_index);
+                value["ok"] = json!(true);
+                value
+            }
+            Err(error) => json!({"module_id": request.module_id, "file_index": request.file_index,
+                "ok": false, "error": error}),
+        });
+    }
+    Ok(json!({"results": results,
+        "note": "Solo se devuelve el primer fragmento de cada archivo; sigue con read_course_file y next_offset."}))
+}
+
+async fn read_item(
+    client: &MoodleClient,
+    module: &Value,
+    item: &Value,
+    offset: u64,
+    limit: usize,
+) -> Result<Value, String> {
     let name = item["filename"].as_str().ok_or(FORMAT_ERROR)?;
     let extension = Path::new(name)
         .extension()
         .and_then(|value| value.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
-    if !["pdf", "txt", "md", "csv", "html", "htm"].contains(&extension.as_str()) {
-        return Err(
-            "Formato no admitido. Se pueden leer PDF con texto, TXT, MD, CSV y HTML.".into(),
-        );
+    let office_kind = office::kind(&extension);
+    if !["pdf", "txt", "md", "csv", "html", "htm"].contains(&extension.as_str())
+        && office_kind.is_none()
+    {
+        return Err(office::legacy_hint(&extension).map_or_else(
+            || "Formato no admitido. Se pueden leer PDF con texto, DOCX, PPTX, XLSX, TXT, MD, CSV y HTML.".to_string(),
+            str::to_string,
+        ));
     }
     if item["filesize"]
         .as_u64()
@@ -72,7 +138,16 @@ pub async fn read(client: &MoodleClient, params: ReadFile) -> Result<Value, Stri
     if content_type.contains("json") {
         return Err(DOWNLOAD_ERROR.into());
     }
-    let document = if extension == "pdf" {
+    let document = if let Some(kind) = office_kind {
+        if !body.starts_with(b"PK") {
+            return Err(
+                "La respuesta no es un documento de Office. Comprueba el acceso al archivo.".into(),
+            );
+        }
+        tokio::task::spawn_blocking(move || office::extract(kind, &body))
+            .await
+            .map_err(|_| "No se pudo extraer el texto de este documento.")??
+    } else if extension == "pdf" {
         if !body.starts_with(b"%PDF-") {
             return Err("La respuesta no es un PDF. Comprueba el acceso al archivo.".into());
         }
@@ -93,15 +168,14 @@ pub async fn read(client: &MoodleClient, params: ReadFile) -> Result<Value, Stri
         }
     };
     let total = document.chars().count();
-    let start = usize::try_from(params.offset).unwrap_or(usize::MAX);
-    let content: String = document.chars().skip(start).take(12000).collect();
-    let next = params
-        .offset
-        .checked_add(12000)
+    let start = usize::try_from(offset).unwrap_or(usize::MAX);
+    let content: String = document.chars().skip(start).take(limit).collect();
+    let next = offset
+        .checked_add(limit as u64)
         .filter(|end| *end < total as u64);
     Ok(client.clean(
         json!({"filename": name, "source_url": item["fileurl"], "module_url": module["url"],
-        "text": content, "total_characters": total, "offset": params.offset, "next_offset": next}),
+        "text": content, "total_characters": total, "offset": offset, "next_offset": next}),
     ))
 }
 
