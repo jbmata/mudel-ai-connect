@@ -1,2 +1,2 @@
-rust/src/instructions.txt text eol=lf
-rust/tests/fixtures/*.pdf binary
+src/instructions.txt text eol=lf
+tests/fixtures/*.pdf binary
