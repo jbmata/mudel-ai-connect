@@ -6,8 +6,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
-$root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-$manifest = Join-Path $root 'rust/Cargo.toml'
+$root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$manifest = Join-Path $root 'Cargo.toml'
 $onWindows = $env:OS -eq 'Windows_NT'
 $onMac = (Test-Path -LiteralPath '/usr/bin/sw_vers') -and -not $onWindows
 if (-not ($onWindows -or $onMac)) { throw 'Genera estos paquetes en Windows o macOS.' }
@@ -20,11 +20,11 @@ if (-not $Target) {
 $architecture = $triple.Split('-')[0]
 $platform = if ($onWindows) { "windows-$architecture" } else { "macos-$architecture" }
 $output = Join-Path $root "dist/native/$platform"
-$build = Join-Path $root "rust/target/$Profile"
+$build = Join-Path $root "target/$Profile"
 $cargoTarget = @()
 if ($Target) {
     $cargoTarget = @('--target', $Target)
-    $build = Join-Path $root "rust/target/$Target/$Profile"
+    $build = Join-Path $root "target/$Target/$Profile"
 }
 $cargoProfile = @()
 if ($Profile -eq 'release') { $cargoProfile = @('--release') }
@@ -44,8 +44,16 @@ function Zip-Public([string]$Directory, [string]$Archive, [bool]$KeepParent = $f
         & /usr/bin/ditto @options $Directory $Archive
         if ($LASTEXITCODE -ne 0) { throw 'No se pudo crear el ZIP de macOS.' }
     } else {
+        # CreateFromDirectory de Windows PowerShell 5.1 escribe rutas con "\", que no es válido en un ZIP.
         Add-Type -AssemblyName System.IO.Compression.FileSystem
-        [IO.Compression.ZipFile]::CreateFromDirectory($Directory, $Archive)
+        $base = (Resolve-Path -LiteralPath $Directory).Path.TrimEnd('\', '/')
+        $zip = [IO.Compression.ZipFile]::Open($Archive, 'Create')
+        try {
+            foreach ($file in Get-ChildItem -LiteralPath $base -Recurse -File -Force) {
+                $name = $file.FullName.Substring($base.Length + 1).Replace('\', '/')
+                [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $file.FullName, $name, [IO.Compression.CompressionLevel]::Optimal)
+            }
+        } finally { $zip.Dispose() }
     }
 }
 
@@ -59,7 +67,7 @@ try {
         # El equipo del usuario no necesita instalar el runtime de Visual C++.
         $env:RUSTFLAGS = ($env:RUSTFLAGS + ' -C target-feature=+crt-static').Trim()
         $cargoTarget = @('--target', $triple)
-        $build = Join-Path $root "rust/target/$triple/$Profile"
+        $build = Join-Path $root "target/$triple/$Profile"
     }
     Invoke-Cargo (@('build', '--manifest-path', $manifest, '--locked', '--bin', 'mudel-ai-connect-server') + $cargoTarget + $cargoProfile)
     $server = Join-Path $build $serverName
@@ -87,11 +95,11 @@ try {
     New-Item -ItemType Directory -Path (Join-Path $plugin 'bin') -Force | Out-Null
     $sources = @{
         'LICENSE' = 'LICENSE'
-        'assets/logo.png' = 'rust/assets/logo.png'
-        'skills/mudel-ai-connect-study/SKILL.md' = 'rust/plugin/skills/mudel-ai-connect-study/SKILL.md'
-        'skills/mudel-ai-connect-study/agents/openai.yaml' = 'rust/plugin/skills/mudel-ai-connect-study/agents/openai.yaml'
-        'skills/setup/SKILL.md' = 'rust/plugin/skills/setup/SKILL.md'
-        'skills/setup/agents/openai.yaml' = 'rust/plugin/skills/setup/agents/openai.yaml'
+        'assets/logo.png' = 'assets/logo.png'
+        'skills/mudel-ai-connect-study/SKILL.md' = 'plugin/skills/mudel-ai-connect-study/SKILL.md'
+        'skills/mudel-ai-connect-study/agents/openai.yaml' = 'plugin/skills/mudel-ai-connect-study/agents/openai.yaml'
+        'skills/setup/SKILL.md' = 'plugin/skills/setup/SKILL.md'
+        'skills/setup/agents/openai.yaml' = 'plugin/skills/setup/agents/openai.yaml'
     }
     foreach ($name in $sources.Keys) {
         $destination = Join-Path $plugin $name
@@ -99,10 +107,10 @@ try {
         Copy-Item -LiteralPath (Join-Path $root $sources[$name]) -Destination $destination
     }
     Copy-Item -LiteralPath $server -Destination (Join-Path $plugin "bin/$serverName")
-    $metadata = Get-Content -LiteralPath (Join-Path $root 'rust/plugin/metadata/plugin.json') -Raw | ConvertFrom-Json
+    $metadata = Get-Content -LiteralPath (Join-Path $root 'plugin/metadata/plugin.json') -Raw | ConvertFrom-Json
     if ($metadata.version -ne $check.version) { throw 'La versión de Rust no coincide con la del plugin.' }
     Write-Json (Join-Path $plugin 'plugin.json') $metadata
-    $claudeMetadata = Get-Content -LiteralPath (Join-Path $root 'rust/plugin/metadata/claude-plugin.json') -Raw | ConvertFrom-Json
+    $claudeMetadata = Get-Content -LiteralPath (Join-Path $root 'plugin/metadata/claude-plugin.json') -Raw | ConvertFrom-Json
     New-Item -ItemType Directory -Path (Join-Path $plugin '.claude-plugin') -Force | Out-Null
     Write-Json (Join-Path $plugin '.claude-plugin/plugin.json') $claudeMetadata
     foreach ($entry in @(@('mcp.json', '${PLUGIN_ROOT}'), @('.mcp.json', '${CLAUDE_PLUGIN_ROOT}'))) {
@@ -110,7 +118,7 @@ try {
             mcpServers = @{ 'mudel-ai-connect' = @{ type = 'stdio'; command = "$($entry[1])/bin/$serverName"; args = @('--plugin') } }
         }
     }
-    $readme = [IO.File]::ReadAllText((Join-Path $root 'rust/plugin/README.md')).Replace('__SERVER__', $serverName)
+    $readme = [IO.File]::ReadAllText((Join-Path $root 'plugin/README.md')).Replace('__SERVER__', $serverName)
     Write-UTF8 (Join-Path $plugin 'README.md') $readme
     if ($onMac) {
         & /bin/chmod 755 (Join-Path $plugin "bin/$serverName")
@@ -158,7 +166,7 @@ try {
     foreach ($name in @('LICENSE', 'README.md')) {
         $destination = Join-Path $output $name
         if ($name -eq 'LICENSE') { Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $destination -Force }
-        else { Copy-Item -LiteralPath (Join-Path $root 'rust/README.md') -Destination $destination -Force }
+        else { Copy-Item -LiteralPath (Join-Path $root 'README.md') -Destination $destination -Force }
         $published += $destination
     }
     $sums = foreach ($file in $published) { (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + (Split-Path -Leaf $file) }

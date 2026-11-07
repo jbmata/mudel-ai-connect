@@ -1,73 +1,73 @@
 # Publicar una versión
 
-Para la aplicación nativa usa `./rust/scripts/package.ps1`: genera el instalador,
-el plugin y las huellas en `dist/native/<sistema-arquitectura>/`. El workflow Tests
-los comprueba y conserva como artefactos para Windows y Mac con Apple Silicon.
-La [guía nativa](rust/README.md) detalla el uso. No necesita PyInstaller. Los pasos
-de generación siguientes corresponden al paquete Python anterior.
-
-El repositorio contiene el código fuente. Los binarios se distribuyen como adjuntos
-de [GitHub Releases](https://github.com/jbmata/mudel-ai-connect/releases). El instalador avisa
-de versiones nuevas leyendo esas releases, así que cada versión tiene que publicarse ahí.
+La aplicación es nativa (Rust). Los binarios se distribuyen como adjuntos de
+[GitHub Releases](https://github.com/jbmata/mudel-ai-connect/releases); el repositorio solo
+contiene el código fuente. La ventana avisa de versiones nuevas leyendo esas releases, así
+que cada versión tiene que publicarse ahí.
 
 ## Preparar la versión
 
-1. Sube la versión en los tres sitios: `VERSION` en `local/mudel_ai_connect_installer.py`,
-   `local/plugin.json` y `local/.claude-plugin/plugin.json`. Un test falla si no coinciden.
+1. Sube la versión en `Cargo.toml` (`version`) y en `plugin/metadata/plugin.json` y
+   `plugin/metadata/claude-plugin.json`. `scripts/package.ps1` falla si no coinciden.
 2. Añade la entrada en [CHANGELOG.md](CHANGELOG.md): qué incluye y los límites conocidos.
-3. Prepara el entorno y ejecuta `python run_tests.py -v` como explica
-   [README.md](README.md#desarrollo-y-pruebas).
+3. Ejecuta formato, Clippy y pruebas:
+
+   ```text
+   cargo fmt -- --check
+   cargo clippy --locked --all-targets --features desktop -- -D warnings
+   cargo test --locked --features desktop
+   ```
 
 ## Generar los paquetes
 
-En Windows, desde la raíz y con el código ya en un commit:
+Los paquetes que se publican deben salir del workflow **Tests** (artefactos
+`mudel-native-*`), que compila en Windows con MSVC y en Mac con Apple Silicon desde el
+commit que vayas a etiquetar. Para generarlos a mano, en cada plataforma:
 
 ```powershell
-.\.venv\Scripts\python.exe local\scripts\build_exe.py
-.\.venv\Scripts\python.exe local\scripts\build_plugin.py
-.\.venv\Scripts\python.exe local\scripts\checksums.py
+./scripts/package.ps1
+./scripts/verify-package.ps1
 ```
 
-Se generan `dist/Mudel-AI-Connect-Setup.exe`, `dist/mudel-ai-connect-plugin-X.Y.Z.zip` y
-`dist/SHA256SUMS.txt`. Genera el `.exe` desde el commit que vayas a etiquetar: así el
-binario publicado corresponde a un código concreto.
+Se crean en `dist/native/<sistema-arquitectura>/`: el instalador (`Mudel-AI-Connect-Setup.exe`
+o el ZIP de la app de Mac), el ZIP del plugin, `LICENSE`, `README.md` y `SHA256SUMS.txt`.
+Las instrucciones para compilar en este equipo Windows sin Visual C++ Build Tools están en
+[docs/DESARROLLO.md](docs/DESARROLLO.md).
 
 ## Probar antes de publicar
 
 Las pruebas automáticas usan respuestas simuladas; no verifican un campus real. En un
-perfil de prueba o un equipo de prueba:
+equipo de prueba, con cada plataforma que vayas a anunciar:
 
-1. Instala con el `.exe` nuevo, con Claude Desktop abierto, y comprueba que pide cerrarlo.
-2. Pregunta en cada cliente que vayas a anunciar: «Consulta Moodle y dime qué asignaturas
-   tengo».
-3. Prueba **Copiar diagnóstico**, **Permisos** y **Desinstalar**.
-4. Si cambiaste de nombre o de carpetas, instala encima de la versión anterior y comprueba
-   que no quedan entradas duplicadas.
+1. Instala con el paquete nuevo, con Claude Desktop abierto, y comprueba que pide cerrarlo.
+2. Pregunta en cada cliente: «Consulta Moodle y dime qué asignaturas tengo».
+3. Pide descargar un archivo y comprueba que queda en la carpeta de Descargas elegida.
+4. Prueba **Copiar diagnóstico**, **Permisos** y **Desinstalar**.
+5. Instala encima de la versión anterior y comprueba que no quedan entradas duplicadas.
 
 ## Publicar en GitHub
 
-1. Revisa los cambios con `git diff` y `git diff --cached`. Comprueba que `.env`,
-   credenciales, copias de configuración y temporales están excluidos.
-2. Crea el commit, súbelo y espera a que termine el workflow **Tests**.
+1. Revisa los cambios con `git diff`. Comprueba que `.env`, credenciales, copias de
+   configuración y temporales están excluidos.
+2. Sube el commit y espera a que termine el workflow **Tests**.
 3. Crea la release con la etiqueta `vX.Y.Z`. Mientras sea una beta, márcala como
    **pre-release**: el aviso de versiones nuevas también las tiene en cuenta.
-4. Adjunta los tres archivos de `dist/`: el instalador, el ZIP del plugin y `SHA256SUMS.txt`.
-5. En la descripción copia la entrada de `CHANGELOG.md` y añade cómo pasar el aviso de
+4. Adjunta los archivos de cada plataforma y su `SHA256SUMS.txt`.
+5. En la descripción copia la entrada de `CHANGELOG.md` y explica cómo pasar el aviso de
    SmartScreen («Más información → Ejecutar de todas formas») y cómo comprobar la huella:
 
    ```powershell
    Get-FileHash .\Mudel-AI-Connect-Setup.exe -Algorithm SHA256
    ```
 
-El plugin incluye `LICENSE`; el instalador la lleva en `_internal/licenses/LICENSE` dentro
-del servidor local empaquetado. Las dependencias conservan sus propias licencias.
-
-`dist/` se conserva fuera de Git. Comparte los paquetes generados, que usan una
-lista explícita de archivos públicos, y conserva las credenciales en tu perfil local.
+El instalador incluye la licencia MIT del proyecto dentro del servidor instalado. Las
+dependencias conservan sus propias licencias. `dist/` queda fuera de Git.
 
 ## Antes de un lanzamiento abierto
 
-- **Firma el instalador** (por ejemplo con Azure Trusted Signing) para evitar los avisos
-  de SmartScreen y los falsos positivos de antivirus.
+- **Firma el instalador** (SignPath Foundation, Azure Trusted Signing o un certificado
+  de firma de código) y **notariza la app de macOS**. Sin firma, SmartScreen y algunos
+  antivirus (por ejemplo, ESET con su detección heurística ML/Augur) pueden marcar o
+  borrar el instalador.
 - Prueba con al menos otro campus además de SIFO.
 - Revisa con alguien con criterio legal el uso de «Moodle» en textos y materiales.

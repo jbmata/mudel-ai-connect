@@ -31,7 +31,7 @@ fn read_file(offset: u64) -> ReadFile {
 }
 
 #[test]
-fn filenames_keep_python_rules_and_block_programs_for_both_platforms() {
+fn filenames_keep_the_legacy_rules_and_block_programs_for_both_platforms() {
     for (name, expected) in [
         ("../../../Startup/x.pdf", "_.._.._Startup_x.pdf"),
         (".bashrc", "bashrc"),
@@ -83,7 +83,7 @@ fn valid_pdf_text_is_read_and_encrypted_blank_or_broken_pdfs_are_rejected() {
 }
 
 #[tokio::test]
-async fn text_and_html_reads_match_python_including_unicode_offsets() {
+async fn text_and_html_reads_match_the_reference_including_unicode_offsets() {
     let cases: Vec<Value> =
         serde_json::from_str(include_str!("../../tests/fixtures/file_reads.json")).unwrap();
     for case in cases {

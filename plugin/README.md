@@ -3,8 +3,7 @@
 Este paquete sirve para la plataforma y arquitectura de su nombre. No necesita
 Python. Conserva el directorio completo del plugin; el servidor está en `bin/`.
 
-Instala esta carpeta como plugin local en tu cliente compatible, igual que el
-paquete Python. Incluye los manifiestos de Codex/ChatGPT Work local y Claude Code,
+Instala esta carpeta como plugin local en tu cliente compatible. Incluye los manifiestos de Codex/ChatGPT Work local y Claude Code,
 el MCP por stdio y las skills de configuración y estudio. El manifiesto arranca
 `bin/__SERVER__ --plugin` y no instala dependencias.
 
@@ -21,8 +20,8 @@ historial del shell ni en un chat. No se lee `.env`. Se valida el formato al gua
 y se comprueba la conexión con `--check`.
 
 La cuenta queda en el perfil del usuario, fuera del paquete: DPAPI en Windows y
-Llavero en macOS. Es independiente de la cuenta del instalador. Si el plugin Python
-ya guardó una cuenta, el lanzador nativo puede leerla. Las preferencias de consultas
+Llavero en macOS. Es independiente de la cuenta del instalador. Si una versión Python
+anterior del plugin ya guardó una cuenta, el lanzador nativo puede leerla. Las preferencias de consultas
 y carpeta de descargas se comparten con el programa y se editan en su ventana.
 
 Reinicia la conexión MCP después de cambiar la cuenta. El servidor no modifica

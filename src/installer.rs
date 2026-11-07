@@ -435,7 +435,7 @@ impl ServerChange {
             }
             atomic_write(
                 &staging.path().join("LICENSE"),
-                include_bytes!("../../LICENSE"),
+                include_bytes!("../LICENSE"),
             )?;
         }
         let backup = tempfile::Builder::new()
@@ -591,7 +591,7 @@ pub async fn install(
     progress: impl Fn(&str),
 ) -> Result<String, String> {
     if SERVER.is_empty() {
-        return Err("Este ejecutable de desarrollo no incluye el servidor. Genera el paquete con rust/scripts/package.ps1.".into());
+        return Err("Este ejecutable de desarrollo no incluye el servidor. Genera el paquete con scripts/package.ps1.".into());
     }
     if clients.is_empty() {
         return Err("Marca al menos una aplicación.".into());

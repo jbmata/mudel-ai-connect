@@ -5,9 +5,10 @@ de IA compatible con MCP. Está preparado para [SIFO de Comillas](https://sifo.c
 y utiliza los permisos de la cuenta conectada. Nada cambia en Moodle: las herramientas
 leen, y la de descarga solo guarda archivos en tu carpeta Descargas.
 
-Aplicación nativa para Windows y macOS con Apple Silicon en la rama `migration/rust`, con interfaz,
-instalador y plugin sin Python: [instalación y compilación](rust/README.md).
-La versión Python anterior se conserva: [programa](local/README.md) · [plugin](local/PLUGIN.md).
+Aplicación nativa para Windows y macOS con Apple Silicon, escrita en Rust y sin
+necesidad de Python: ventana de instalación, servidor MCP y plugin.
+Las versiones v0.1 y v0.2, escritas en Python, siguen en sus
+[releases](https://github.com/jbmata/mudel-ai-connect/releases).
 
 El flujo es: **pregunta → IA + skill → MCP → Moodle → respuesta con fuentes**.
 La IA consulta los datos cuando los necesita; no carga todo el campus en cada
@@ -30,39 +31,45 @@ Qué sale de tu PC:
 - **Lo que la IA lee de tus asignaturas** pasa por el proveedor de esa IA (Anthropic,
   OpenAI…), como cualquier conversación. Revisa la política de tu universidad antes de
   usarlo con materiales del curso.
-- **Versiones y actualizaciones** abre las releases de GitHub en la versión nativa.
-  El instalador Python anterior consulta esa lista automáticamente al abrirse.
+- **Avisos de versión nueva:** al abrirse, la ventana consulta la lista pública de
+  releases de GitHub para avisarte. GitHub ve tu IP, como en cualquier descarga; no se
+  envía nada tuyo y no se descarga nada sin que lo hagas tú.
 - No hay telemetría. Si algo falla, **Copiar diagnóstico** te da un texto para pedir ayuda,
   con estados y rutas de tu equipo pero nunca tu token.
 
 Los cambios de cada versión y sus límites conocidos están en [CHANGELOG.md](CHANGELOG.md).
 
-## Programa local
+## Instalar
 
-El [programa local](local/README.md) incluye un instalador `.exe` para Windows y
-un plugin por `stdio`. El MCP se ejecuta en tu PC y consulta Moodle directamente.
-Funciona con Claude Desktop, Claude Code, ChatGPT Work local y Codex.
-ChatGPT Work local y Codex comparten configuración y aparecen juntos en una casilla
-del instalador. El PC debe estar encendido mientras utilizas la conexión.
+Descarga los paquetes de las [releases](https://github.com/jbmata/mudel-ai-connect/releases)
+(o los artefactos `mudel-native-*` del workflow Tests de GitHub Actions):
 
-El núcleo nativo está en [`rust/`](rust/README.md); [`shared/`](shared/moodle_mcp.py)
-conserva el servidor Python para comprobar la compatibilidad de las siete herramientas.
-El instalador guarda la clave en el almacén seguro del sistema.
-Su botón **Permisos** permite elegir si la IA puede consultar asignaturas,
-materiales, tareas y calendario, y si puede descargar archivos; el MCP bloquea lo
-que esté desactivado.
+- **Windows:** abre `Mudel-AI-Connect-Setup.exe`.
+- **Mac con Apple Silicon:** extrae `Mudel-AI-Connect-Setup-macos-aarch64.zip` y abre
+  `Mudel AI Connect.app`.
+- **Plugin:** `mudel-ai-connect-plugin-native-*.zip` contiene el plugin para Codex,
+  ChatGPT Work local y Claude Code, con las skills. Su README explica la configuración.
+
+En la ventana indica tu campus y tu token, marca los clientes (Claude Desktop, Claude
+Code, ChatGPT Work local / Codex) y pulsa **Instalar**. Su botón **Permisos** permite
+elegir si la IA puede consultar asignaturas, materiales, tareas y calendario, y si puede
+descargar archivos; el MCP bloquea lo que esté desactivado. El PC debe estar encendido
+mientras uses la conexión.
+
+Los paquetes aún **no están firmados**: Windows SmartScreen y algunos antivirus pueden
+avisar o marcarlos como sospechosos por heurística. Comprueba la huella con
+`SHA256SUMS.txt`. Los pasos para ChatGPT Work local están en [docs/CHATGPT.md](docs/CHATGPT.md).
 
 ```text
 MCP-MOODLE/
-├── shared/    núcleo MCP: moodle_mcp.py, logo y dependencias
-├── local/     instalador, plugin, skills y empaquetado
-├── rust/      aplicación nativa, instalador y plugin para Windows/macOS
-├── run_tests.py
+├── src/       servidor MCP, instalador, ventana, credenciales y actualizaciones
+├── tests/     pruebas de proceso y datos de referencia
+├── plugin/    skills, manifiestos y guía del plugin
+├── scripts/   empaquetado y verificación de los paquetes
+├── docs/      guía de desarrollo y de ChatGPT Work local
+├── assets/    logos
 └── dist/      paquetes generados (no se versionan)
 ```
-
-Consulta la [guía de instalación](local/README.md) y los pasos para
-[ChatGPT Work local](local/CHATGPT.md).
 
 ## Herramientas y skills
 
@@ -76,9 +83,9 @@ Consulta la [guía de instalación](local/README.md) y los pasos para
 | `read_course_file` | Extraer texto de PDF, TXT, MD, CSV y HTML del curso. |
 | `download_course_file` | Guardar un archivo del curso, en cualquier formato, en tu carpeta Descargas. |
 
-- [`mudel-ai-connect-study`](local/skills/mudel-ai-connect-study/SKILL.md): consulta, estudio con fuentes y
-  planificación. Se incluye en el plugin local.
-- [`setup`](local/skills/setup/SKILL.md): instalación y diagnóstico de la conexión local.
+- [`mudel-ai-connect-study`](plugin/skills/mudel-ai-connect-study/SKILL.md): consulta, estudio con fuentes y
+  planificación. Se incluye en el plugin.
+- [`setup`](plugin/skills/setup/SKILL.md): instalación y diagnóstico de la conexión local.
 
 El prompt MCP `estudiar_curso` y las instrucciones del servidor también orientan
 la consulta de materiales y las citas para clientes que no cargan skills.
@@ -115,24 +122,19 @@ También necesita permiso para descargar archivos del servicio.
 
 ## Desarrollo y pruebas
 
-La migración experimental del servidor a Rust está en [`rust/`](rust/README.md),
-en la rama `migration/rust`. El instalador y el plugin siguen usando Python.
-
-Desde la carpeta del proyecto:
+Se necesita Rust 1.89 o superior. Desde la raíz del repositorio:
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r local\requirements.txt
-.\.venv\Scripts\python.exe run_tests.py
+cargo test --locked --features desktop
+./scripts/package.ps1
+./scripts/verify-package.ps1
 ```
 
-`run_tests.py` ejecuta las pruebas de `shared` y `local`. Usan cuentas ficticias
-y respuestas simuladas de Moodle. `local/requirements.txt` incluye las dependencias
-del núcleo MCP.
-
-GitHub Actions comprueba Python y los paquetes nativos de Windows y
-Mac con Apple Silicon en cada push y pull request. Las pruebas Rust y la generación
-de paquetes se explican en [rust/README.md](rust/README.md).
+Las pruebas usan cuentas ficticias, respuestas simuladas de Moodle y servidores HTTP
+locales; no consultan un campus real. GitHub Actions ejecuta formato, Clippy, pruebas y
+empaquetado en Windows y Mac con Apple Silicon en cada push y pull request.
+Los detalles (cadena de compilación, cuentas, archivos y validación) están en
+[docs/DESARROLLO.md](docs/DESARROLLO.md).
 
 ## Publicación y licencia
 
@@ -160,5 +162,5 @@ sus propias licencias.
 - No hay índice local ni memoria persistente de los contenidos consultados.
 - Requiere un cliente con ejecución MCP local y los permisos de la cuenta.
 
-Implementado con el [SDK de MCP para Python](https://py.sdk.modelcontextprotocol.io/)
+Implementado con el [SDK oficial de MCP para Rust](https://github.com/modelcontextprotocol/rust-sdk)
 y la [API de servicios externos de Moodle](https://moodledev.io/docs/5.0/apis/subsystems/external).

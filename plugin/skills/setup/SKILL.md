@@ -6,7 +6,7 @@ description: Configura o repara la conexión nativa de Mudel AI Connect con el c
 # Configurar Mudel AI Connect
 
 Este paquete incluye un servidor nativo para la plataforma indicada en su README.
-No necesita Python ni descargar dependencias. No ejecutes el instalador Python.
+No necesita Python ni descargar dependencias.
 
 Primero prueba `moodle_status`. Si ya funciona, conserva la cuenta y continúa con
 la petición del usuario. Un recurso no accesible no implica un fallo de toda la conexión.

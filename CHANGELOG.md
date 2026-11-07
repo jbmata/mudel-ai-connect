@@ -1,5 +1,24 @@
 # Cambios
 
+## Sin publicar — aplicación nativa
+
+- Todo el programa está reescrito en Rust y no necesita Python: servidor MCP, ventana de
+  instalación y lanzador del plugin. Windows x64 y macOS con Apple Silicon.
+- Las siete herramientas, el prompt `estudiar_curso` y los permisos conservan sus nombres,
+  parámetros y resultados. Las cuentas y preferencias de la v0.2 se reconocen al actualizar.
+- El token se guarda en el Llavero de macOS o cifrado con DPAPI en Windows, con cuentas
+  separadas para el instalador y para el plugin.
+- La ventana avisa de versiones nuevas leyendo las releases públicas de GitHub.
+- Se retiran del repositorio el instalador, el servidor y las pruebas en Python. Las
+  versiones v0.1 y v0.2 siguen disponibles en sus releases.
+- El empaquetado genera ZIP con rutas válidas también desde Windows PowerShell 5.1.
+
+### Límites conocidos
+
+- Los paquetes aún no están firmados ni notarizados. Algunos antivirus pueden marcarlos.
+- Probado con SIFO (Comillas) en Windows. Falta probar el instalador completo, la descarga
+  de archivos y cada cliente de IA en Windows y en Mac.
+
 ## v0.2.0 — beta
 
 - Herramienta `download_course_file`: guarda un archivo del curso, en cualquier formato,
