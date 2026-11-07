@@ -11,6 +11,10 @@
 - La ventana avisa de versiones nuevas leyendo las releases públicas de GitHub.
 - Se retiran del repositorio el instalador, el servidor y las pruebas en Python. Las
   versiones v0.1 y v0.2 siguen disponibles en sus releases.
+- El instalador ya no exige cerrar Claude Desktop ni las demás apps: sustituye el servidor
+  aunque esté en uso y avisa al terminar de que Claude Desktop debe reiniciarse.
+- La ventana tiene tamaño fijo, sin barra de desplazamiento, y un aspecto de instalador
+  de escritorio.
 - El empaquetado genera ZIP con rutas válidas también desde Windows PowerShell 5.1.
 
 ### Límites conocidos

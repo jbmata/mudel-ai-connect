@@ -39,7 +39,8 @@ Las instrucciones para compilar en este equipo Windows sin Visual C++ Build Tool
 Las pruebas automáticas usan respuestas simuladas; no verifican un campus real. En un
 equipo de prueba, con cada plataforma que vayas a anunciar:
 
-1. Instala con el paquete nuevo, con Claude Desktop abierto, y comprueba que pide cerrarlo.
+1. Instala con el paquete nuevo con Claude Desktop y Claude Code abiertos: debe terminar sin
+   pedir que se cierren y avisar de que Claude Desktop necesita reiniciarse.
 2. Pregunta en cada cliente: «Consulta Moodle y dime qué asignaturas tengo».
 3. Pide descargar un archivo y comprueba que queda en la carpeta de Descargas elegida.
 4. Prueba **Copiar diagnóstico**, **Permisos** y **Desinstalar**.

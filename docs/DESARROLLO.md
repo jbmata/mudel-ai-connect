@@ -29,15 +29,18 @@ Los paquetes están en `dist/native/<sistema-arquitectura>/`, o en los artefacto
 
 En la ventana, introduce el campus y el token, marca los clientes y pulsa **Instalar**.
 El token se oculta. Si dejas el campo vacío, solo se reutiliza una cuenta guardada
-por el programa para ese mismo campus. Cierra las aplicaciones de IA cuando se
-solicite y abre una sesión nueva al terminar.
+por el programa para ese mismo campus. No hace falta cerrar nada antes: si una app de
+IA está usando el servidor, se aparta su copia y la app sigue con ella hasta que abras
+una sesión nueva; si Claude Desktop está abierto, avisa al terminar de que debe
+cerrarse del todo y abrirse de nuevo para cargar la conexión.
 
 El instalador comprueba Moodle antes de tocar la instalación y vuelve a comprobar
 el servidor instalado con la cuenta guardada. Conserva otros servidores y ajustes
 de los clientes; crea copias privadas de sus configuraciones. Si falla, restaura
 el servidor, las configuraciones y los bytes originales de las credenciales.
 Si un bloqueo impide restaurar o limpiar algo, indica dónde quedaron las copias.
-No cierra ni mata aplicaciones automáticamente.
+No cierra ni mata aplicaciones. Las copias anteriores que siguen en uso se borran en la
+siguiente ejecución del instalador.
 
 Detecta Claude Desktop (incluidas las carpetas nuevas de Windows), Claude Code y
 ChatGPT Work local / Codex. En Mac, Claude Desktop usa `~/Library/Application Support/Claude`.

@@ -40,6 +40,7 @@ struct Setup {
     folder: Option<PathBuf>,
     preferences: bool,
     confirm_remove: bool,
+    token_help: bool,
     message: String,
     error: bool,
     task: Option<Receiver<Event>>,
@@ -70,6 +71,7 @@ impl Setup {
             folder: None,
             preferences: false,
             confirm_remove: false,
+            token_help: false,
             message: String::new(),
             error: false,
             task: None,
@@ -197,7 +199,6 @@ impl Setup {
 
     fn show(&mut self, ctx: &egui::Context) {
         self.poll(ctx);
-        fit_to_screen(ctx);
         let busy = self.task.is_some();
         if busy && ctx.input(|input| input.viewport().close_requested()) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
@@ -209,6 +210,7 @@ impl Setup {
                     .inner_margin(egui::Margin::symmetric(22, 12)),
             )
             .show(ctx, |ui| {
+                self.status(ui, busy);
                 ui.add_enabled_ui(!busy && !self.confirm_remove, |ui| {
                     self.actions(ui, ctx);
                 });
@@ -217,19 +219,14 @@ impl Setup {
             .fill(theme::BACKGROUND)
             .inner_margin(egui::Margin::symmetric(22, 16));
         egui::CentralPanel::default().frame(frame).show(ctx, |ui| {
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    self.header(ui);
-                    self.update_notice(ui);
-                    ui.add_enabled_ui(!busy && !self.confirm_remove, |ui| {
-                        self.campus_panel(ui);
-                        ui.add_space(10.0);
-                        self.apps_panel(ui);
-                    });
-                    self.status(ui, busy);
-                    self.footer(ui, ctx, busy);
-                });
+            self.header(ui);
+            self.update_notice(ui);
+            ui.add_enabled_ui(!busy && !self.confirm_remove, |ui| {
+                self.campus_panel(ui);
+                ui.add_space(10.0);
+                self.apps_panel(ui);
+            });
+            self.footer(ui, ctx, busy);
         });
         if self.preferences {
             self.show_preferences(ctx, busy);
@@ -237,6 +234,28 @@ impl Setup {
         if self.confirm_remove {
             self.show_uninstall(ctx);
         }
+        if self.token_help {
+            self.show_token_help(ctx);
+        }
+    }
+
+    fn show_token_help(&mut self, ctx: &egui::Context) {
+        let mut open = true;
+        egui::Window::new("Cómo obtener el token")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.set_max_width(380.0);
+                ui.label("En Moodle: tu foto o nombre → Preferencias → Cuenta de usuario → Claves de seguridad. Copia el token de Servicios web, no el de RSS.");
+                ui.add_space(4.0);
+                ui.label("Si no aparece, pídelo al soporte del centro.");
+                ui.label(theme::muted(
+                    "Nunca introduzcas tu contraseña de Moodle aquí ni el token en un chat.",
+                ));
+            });
+        self.token_help &= open;
     }
 
     fn header(&self, ui: &mut egui::Ui) {
@@ -287,13 +306,16 @@ impl Setup {
                     .hint_text("Vacío: conservar la cuenta guardada para este campus"),
             )
             .labelled_by(label.id);
-            egui::CollapsingHeader::new("Cómo obtener el token").show(ui, |ui| {
-                ui.label("En Moodle: tu foto o nombre → Preferencias → Cuenta de usuario → Claves de seguridad. Copia el token de Servicios web, no el de RSS.");
-                ui.label("Si no aparece, pídelo al soporte del centro. Nunca introduzcas tu contraseña de Moodle aquí ni el token en un chat.");
+            ui.horizontal(|ui| {
+                ui.label(theme::muted(
+                    "Se guarda cifrado y solo se envía a tu Moodle.",
+                ));
+                theme::right(ui, |ui| {
+                    if theme::link(ui, "¿Cómo lo consigo?").clicked() {
+                        self.token_help = true;
+                    }
+                });
             });
-            ui.label(theme::muted(
-                "El token se guarda en el almacén seguro del sistema y solo se envía a tu Moodle.",
-            ));
         });
     }
 
@@ -366,7 +388,6 @@ impl Setup {
 
     fn status(&self, ui: &mut egui::Ui, busy: bool) {
         if busy {
-            ui.add_space(10.0);
             theme::notice(ui, theme::MUTED, theme::CARD, |ui| {
                 ui.spinner();
                 ui.label(&self.message);
@@ -374,8 +395,8 @@ impl Setup {
             ui.label(theme::muted(
                 "Espera a que termine antes de cerrar la ventana.",
             ));
+            ui.add_space(8.0);
         } else if !self.message.is_empty() {
-            ui.add_space(10.0);
             let (color, fill) = if self.error {
                 (theme::RED, theme::RED_SOFT)
             } else {
@@ -384,6 +405,7 @@ impl Setup {
             theme::notice(ui, color, fill, |ui| {
                 ui.label(&self.message);
             });
+            ui.add_space(8.0);
         }
     }
 
@@ -415,7 +437,6 @@ impl Setup {
             .show(ctx, |ui| {
                 ui.set_max_width(400.0);
                 ui.label("Se borrarán el servidor y el token de esta instalación. Se conservarán tus permisos y la cuenta separada del plugin.");
-                ui.label(theme::muted("Cierra las aplicaciones de IA antes de continuar."));
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     if theme::danger(ui, "Desinstalar").clicked() {
@@ -499,19 +520,6 @@ impl eframe::App for Setup {
     }
 }
 
-/// Ajusta la altura inicial a la pantalla para que quepa en portátiles pequeños.
-fn fit_to_screen(ctx: &egui::Context) {
-    static DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-    if DONE.load(std::sync::atomic::Ordering::Relaxed) {
-        return;
-    }
-    if let Some(monitor) = ctx.input(|input| input.viewport().monitor_size) {
-        DONE.store(true, std::sync::atomic::Ordering::Relaxed);
-        let height = (monitor.y * 0.88).clamp(480.0, 680.0);
-        ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(540.0, height)));
-    }
-}
-
 /// Consulta en segundo plano si hay una versión nueva; sin red, simplemente no avisa.
 fn check_for_updates(ctx: &egui::Context) -> Receiver<Option<Release>> {
     let (sender, receiver) = mpsc::channel();
@@ -557,8 +565,9 @@ fn main() -> eframe::Result {
         }
     };
     let mut viewport = egui::ViewportBuilder::default()
-        .with_inner_size([540.0, 680.0])
-        .with_min_inner_size([460.0, 480.0]);
+        .with_inner_size([540.0, 640.0])
+        .with_resizable(false)
+        .with_maximize_button(false);
     if let Ok(icon) = eframe::icon_data::from_png_bytes(LOGO) {
         viewport = viewport.with_icon(icon);
     }
@@ -603,6 +612,7 @@ mod tests {
             folder: None,
             preferences: true,
             confirm_remove: true,
+            token_help: true,
             message: "Prueba".into(),
             error: false,
             task: None,

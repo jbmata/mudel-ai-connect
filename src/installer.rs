@@ -407,6 +407,8 @@ struct ServerChange {
     backup: PathBuf,
     had_old: bool,
     published: bool,
+    /// El servidor anterior estaba en uso: solo se apartó su ejecutable y se conserva la carpeta.
+    in_place: bool,
 }
 
 impl ServerChange {
@@ -448,12 +450,33 @@ impl ServerChange {
             backup,
             had_old: target.exists(),
             published: false,
+            in_place: false,
         };
         if change.had_old && fs::rename(target, change.backup.join("server")).is_err() {
-            let _ = fs::remove_dir(&change.backup);
-            return Err(IO_ERROR.into());
+            // Windows no deja renombrar una carpeta con un programa en marcha, pero sí su
+            // ejecutable: se aparta solo ese archivo y el programa sigue con su copia.
+            if !target.join(EXE).is_file()
+                || fs::rename(target.join(EXE), change.backup.join("aside")).is_err()
+            {
+                let _ = fs::remove_dir(&change.backup);
+                return Err(IO_ERROR.into());
+            }
+            change.in_place = true;
         }
-        if payload.is_some() {
+        if change.in_place {
+            if payload.is_some() {
+                change.published = true;
+                let placed = fs::rename(staging.path().join(EXE), target.join(EXE)).is_ok()
+                    && atomic_write(&target.join("LICENSE"), include_bytes!("../LICENSE")).is_ok();
+                if !placed {
+                    change.rollback()?;
+                    return Err(IO_ERROR.into());
+                }
+            } else {
+                // Desinstalar: se borra lo que no esté en uso.
+                let _ = remove_tree(target);
+            }
+        } else if payload.is_some() {
             if fs::rename(staging.path(), target).is_err() {
                 change.rollback()?;
                 return Err(IO_ERROR.into());
@@ -464,6 +487,14 @@ impl ServerChange {
     }
 
     fn rollback(&self) -> Result<(), String> {
+        if self.in_place {
+            if self.published {
+                let _ = fs::remove_file(self.target.join(EXE));
+            }
+            fs::create_dir_all(&self.target).map_err(|_| IO_ERROR)?;
+            fs::rename(self.backup.join("aside"), self.target.join(EXE)).map_err(|_| IO_ERROR)?;
+            return fs::remove_dir(&self.backup).map_err(|_| IO_ERROR.into());
+        }
         if self.published {
             remove_tree(&self.target)?;
         }
@@ -475,7 +506,10 @@ impl ServerChange {
     }
 
     fn finish(&self) -> Result<(), String> {
-        remove_tree(&self.backup)
+        // Si la copia anterior sigue en uso (una app con el servidor abierto), no es un fallo:
+        // `sweep` la borrará en la siguiente ejecución.
+        let _ = remove_tree(&self.backup);
+        Ok(())
     }
 }
 
@@ -504,17 +538,25 @@ fn remove_tree(path: &Path) -> Result<(), String> {
     fs::remove_dir_all(path).map_err(|_| IO_ERROR.into())
 }
 
-fn ensure_closed(paths: &Paths, clients: &[Client], replacing: bool) -> Result<(), String> {
+/// Claude Desktop solo lee su configuración al arrancar: si está abierto, no bloquea la
+/// instalación, pero hay que avisar de que debe reiniciarse.
+fn claude_desktop_running(clients: &[Client]) -> bool {
+    if !clients
+        .iter()
+        .any(|client| client.key.starts_with("claude-desktop"))
+    {
+        return false;
+    }
     let system = System::new_with_specifics(
         RefreshKind::nothing()
             .with_processes(ProcessRefreshKind::nothing().with_exe(UpdateKind::Always)),
     );
-    for process in system.processes().values() {
+    system.processes().values().any(|process| {
         let Some(exe) = process.exe() else {
-            continue;
+            return false;
         };
         let text = exe.to_string_lossy().to_lowercase();
-        let desktop = (text.ends_with("\\claude.exe")
+        (text.ends_with("\\claude.exe")
             && [
                 "\\windowsapps\\claude_",
                 "\\anthropicclaude\\",
@@ -522,21 +564,32 @@ fn ensure_closed(paths: &Paths, clients: &[Client], replacing: bool) -> Result<(
             ]
             .iter()
             .any(|part| text.contains(part)))
-            || text.contains("/claude.app/contents/macos/");
-        if desktop
-            && clients
-                .iter()
-                .any(|client| client.key.starts_with("claude-desktop"))
-        {
-            return Err("Cierra Claude Desktop del todo, también desde la bandeja o el menú, y vuelve a intentarlo.".into());
-        }
-        if replacing
-            && (exe.starts_with(paths.server_dir()) || exe.starts_with(paths.legacy().join("bin")))
-        {
-            return Err("Una aplicación está usando Mudel AI Connect. Cierra las aplicaciones de IA y vuelve a intentarlo.".into());
+            || text.contains("/claude.app/contents/macos/")
+    })
+}
+
+/// Borra sin molestar los restos de instalaciones anteriores: copias que seguían en uso y
+/// archivos de versiones que no son la actual.
+fn sweep(paths: &Paths) {
+    let server_dir = paths.server_dir();
+    if let Some(bin) = server_dir.parent() {
+        for entry in fs::read_dir(bin).into_iter().flatten().flatten() {
+            if entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("mudel-previous-")
+            {
+                let _ = remove_tree(&entry.path());
+            }
         }
     }
-    Ok(())
+    if server_matches(&server_dir, SERVER) {
+        for entry in fs::read_dir(&server_dir).into_iter().flatten().flatten() {
+            if entry.file_name() != EXE && entry.file_name() != "LICENSE" {
+                let _ = remove_tree(&entry.path());
+            }
+        }
+    }
 }
 
 pub fn resolve_account(paths: &Paths, url: &str, token: &str) -> Result<Credentials, String> {
@@ -599,7 +652,7 @@ pub async fn install(
     progress("Probando la conexión con Moodle…");
     let info = check_account(account).await?;
     let _guard = lock(&paths.data)?;
-    ensure_closed(paths, clients, !server_matches(&paths.server_dir(), SERVER))?;
+    let desktop_open = claude_desktop_running(clients);
     let changes = installation_changes(paths, clients)?;
     progress("Instalando el servidor y conectando los clientes…");
     let servers = change_servers(paths, Some(SERVER))?;
@@ -608,11 +661,17 @@ pub async fn install(
     })
     .await;
     complete_servers(servers, result)?;
+    sweep(paths);
     let mut message = format!(
         "Conectado: {} en {}. Abre una sesión nueva en tus aplicaciones de IA.",
         info["user"].as_str().unwrap_or("tu cuenta"),
         info["site"].as_str().unwrap_or("Moodle")
     );
+    if desktop_open {
+        message.push_str(
+            " Claude Desktop está abierto: ciérralo del todo (también desde la bandeja) y ábrelo de nuevo para que cargue la conexión.",
+        );
+    }
     if let Some(missing) = info["missing_functions"].as_array()
         && !missing.is_empty()
     {
@@ -769,7 +828,7 @@ fn add_legacy_credentials(paths: &Paths, changes: &mut Vec<Change>) -> Result<()
 pub fn uninstall(paths: &Paths) -> Result<String, String> {
     let _guard = lock(&paths.data)?;
     let clients = paths.all_clients();
-    ensure_closed(paths, &clients, true)?;
+    let desktop_open = claude_desktop_running(&clients);
     let mut changes = clients
         .iter()
         .map(|client| Change::client(client, None))
@@ -798,7 +857,15 @@ pub fn uninstall(paths: &Paths) -> Result<String, String> {
         }
     });
     complete_servers(servers, result)?;
-    Ok("Programa desconectado y token de esta instalación borrado. Se conservan los permisos y la cuenta del plugin. El token sigue siendo válido en Moodle hasta que lo restablezcas allí.".into())
+    let mut message = String::from(
+        "Programa desconectado y token de esta instalación borrado. Se conservan los permisos y la cuenta del plugin. El token sigue siendo válido en Moodle hasta que lo restablezcas allí.",
+    );
+    if desktop_open {
+        message.push_str(
+            " Claude Desktop sigue abierto: reinícialo para que deje de mostrar la conexión.",
+        );
+    }
+    Ok(message)
 }
 
 pub const PERMISSIONS: [(&str, &str); 5] = [

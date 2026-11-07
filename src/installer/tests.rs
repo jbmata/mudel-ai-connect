@@ -319,3 +319,79 @@ fn linked_configurations_are_preserved_and_copies_are_private() {
     assert!(atomic_write(&linked, b"replace").is_err());
     assert_eq!(fs::read(source).unwrap(), b"keep");
 }
+
+#[cfg(windows)]
+#[test]
+fn a_running_server_is_replaced_and_restored_without_closing_it() {
+    let temporary = tempfile::tempdir().unwrap();
+    let target = temporary.path().join("bin/server");
+    fs::create_dir_all(&target).unwrap();
+    let ping = PathBuf::from(std::env::var_os("SystemRoot").unwrap()).join("System32/PING.EXE");
+    fs::copy(&ping, target.join(EXE)).unwrap();
+    let original = fs::read(target.join(EXE)).unwrap();
+    fs::write(target.join("old-library.dll"), b"old").unwrap();
+    // Claude y Codex mantienen el servidor en marcha mientras se actualiza.
+    let mut running = std::process::Command::new(target.join(EXE))
+        .args(["-n", "60", "127.0.0.1"])
+        .stdout(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+
+    let change = ServerChange::apply(&target, Some(b"new exe"))
+        .unwrap()
+        .unwrap();
+    assert_eq!(fs::read(target.join(EXE)).unwrap(), b"new exe");
+    assert!(running.try_wait().unwrap().is_none());
+    change.rollback().unwrap();
+    assert_eq!(fs::read(target.join(EXE)).unwrap(), original);
+    assert!(running.try_wait().unwrap().is_none());
+
+    let change = ServerChange::apply(&target, Some(b"new exe"))
+        .unwrap()
+        .unwrap();
+    change.finish().unwrap();
+    assert_eq!(fs::read(target.join(EXE)).unwrap(), b"new exe");
+    assert!(
+        running.try_wait().unwrap().is_none(),
+        "no se debe cerrar el programa en marcha"
+    );
+    running.kill().unwrap();
+    running.wait().unwrap();
+}
+
+#[cfg(windows)]
+#[test]
+fn a_locked_folder_falls_back_to_replacing_only_the_executable() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let temporary = tempfile::tempdir().unwrap();
+    let target = temporary.path().join("bin/server");
+    fs::create_dir_all(&target).unwrap();
+    fs::write(target.join(EXE), b"old exe").unwrap();
+    fs::write(target.join("loaded.dll"), b"in use").unwrap();
+    // Un archivo abierto sin permiso para moverse impide renombrar la carpeta.
+    let _held = fs::OpenOptions::new()
+        .read(true)
+        .share_mode(1)
+        .open(target.join("loaded.dll"))
+        .unwrap();
+    assert!(fs::rename(&target, temporary.path().join("moved")).is_err());
+
+    let change = ServerChange::apply(&target, Some(b"new exe"))
+        .unwrap()
+        .unwrap();
+    assert_eq!(fs::read(target.join(EXE)).unwrap(), b"new exe");
+    assert!(target.join("loaded.dll").is_file());
+    change.rollback().unwrap();
+    assert_eq!(fs::read(target.join(EXE)).unwrap(), b"old exe");
+
+    let change = ServerChange::apply(&target, Some(b"new exe"))
+        .unwrap()
+        .unwrap();
+    change.finish().unwrap();
+    assert_eq!(fs::read(target.join(EXE)).unwrap(), b"new exe");
+    // Desinstalar con la carpeta bloqueada deja desconectado el ejecutable sin fallar.
+    let removed = ServerChange::apply(&target, None).unwrap().unwrap();
+    assert!(!target.join(EXE).exists());
+    removed.rollback().unwrap();
+    assert_eq!(fs::read(target.join(EXE)).unwrap(), b"new exe");
+}
