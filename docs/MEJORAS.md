@@ -4,7 +4,7 @@ Lista de lo que se quiere añadir a Mudel AI Connect, con su estado y las notas 
 ya se han comprobado. Todo es de **solo lectura**: no se añade ninguna herramienta que cambie
 algo en Moodle.
 
-Última revisión: 2026-11-07.
+Última revisión: 2026-11-08.
 
 ## Estado
 
@@ -112,6 +112,25 @@ todo el tema 3»).
 incrustadas de PPTX, DOCX y XLSX. Queda fuera: dibujos hechos con formas de PowerPoint, gráficos de
 Office y formatos EMF, WMF y SVG. Una opción posible, no implementada: convertir PPTX y DOCX a PDF
 con LibreOffice si está instalado y dibujar esas páginas.
+
+También existe `save_course_figures`, que guarda esas mismas figuras en Descargas y devuelve la ruta,
+para los clientes que no muestran las imágenes del chat.
+
+## Propuestas pendientes (2026-11-08)
+
+Ordenadas por lo que aportan frente al esfuerzo. Ninguna está empezada.
+
+| # | Propuesta | Esfuerzo | Notas |
+| --- | --- | --- | --- |
+| P1 | **Firmar los ejecutables** | Medio (trámites) | Es lo más urgente: ESET (detección heurística `ML/Augur`) borra el instalador sin firmar y SmartScreen avisa. SignPath Foundation firma gratis proyectos de código abierto; hay que pedir el alta y no se sabe cuánto tardan. En Mac hay que notarizar con una cuenta de desarrollador de Apple (unos 99 $ al año). |
+| P2 | **PDF escaneados** | Mínimo | `read_course_file` dice «puede requerir OCR». Con `view_course_file` el modelo ya puede ver esas páginas como imagen, así que basta cambiar el mensaje para que lo sugiera. Sin OCR en el instalador. |
+| P3 | **Avisar de que un material tiene figuras** | Bajo | Que `read_course_file` indique, por ejemplo, «la página 2 tiene 3 imágenes» o «la diapositiva 4 tiene dibujos», para que el modelo sepa cuándo llamar a `view_course_file` sin depender de que se le ocurra. |
+| P4 | **Preguntas guiadas (prompts MCP)** | Bajo | Plantillas como «hazme un test con las pruebas anteriores de esta asignatura», «plan de estudio hasta la próxima entrega» o «resume el tema 3 con sus fuentes». Ya existe `estudiar_curso`; estas se añaden igual. |
+| P5 | **Diapositivas completas de PowerPoint** | Medio | Hoy solo salen las imágenes incrustadas. Exportar la presentación a PDF con PowerPoint (solo Windows con Office; hay `POWERPNT.EXE` en este equipo) o con LibreOffice si está instalado, y dibujar esas páginas con el mismo motor. Tarda unos segundos por archivo y depende de software externo; no se ha probado. |
+| P6 | **Buscar dentro de los archivos** | Alto | `search_course` solo busca en nombres de archivo y secciones. Buscar «termopar» y encontrar la prueba exige un índice local de texto, con su coste de disco y de actualización. |
+
+Siguen sin elegirse los cuestionarios (fechas, intentos y notas) y los mensajes de Moodle; ambos
+serían de solo lectura.
 
 ## No elegidas por ahora
 
