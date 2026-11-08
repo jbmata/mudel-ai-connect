@@ -395,3 +395,24 @@ fn a_locked_folder_falls_back_to_replacing_only_the_executable() {
     removed.rollback().unwrap();
     assert_eq!(fs::read(target.join(EXE)).unwrap(), b"new exe");
 }
+
+#[test]
+fn only_the_claude_desktop_app_counts_as_open_not_claude_code() {
+    assert!(is_claude_desktop(
+        r"c:\program files\windowsapps\claude_1.2.3_x64__abc\app\claude.exe"
+    ));
+    assert!(is_claude_desktop(
+        r"c:\users\a\appdata\local\anthropicclaude\app-1.0\claude.exe"
+    ));
+    assert!(is_claude_desktop(
+        "/applications/claude.app/contents/macos/claude"
+    ));
+    assert!(!is_claude_desktop(r"c:\users\a\.local\bin\claude.exe"));
+    assert!(!is_claude_desktop(r"c:\tools\other\codex.exe"));
+}
+
+#[test]
+fn nothing_is_reported_or_closed_when_no_app_is_selected() {
+    assert!(running_apps(&[]).is_empty());
+    assert_eq!(close_apps(&[]).unwrap(), "No había aplicaciones abiertas.");
+}

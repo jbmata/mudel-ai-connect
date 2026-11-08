@@ -538,9 +538,8 @@ fn remove_tree(path: &Path) -> Result<(), String> {
     fs::remove_dir_all(path).map_err(|_| IO_ERROR.into())
 }
 
-/// Las aplicaciones solo leen su configuración al arrancar: si alguna está abierta no se
-/// bloquea la instalación, pero hay que avisar de que debe reiniciarse.
-fn running_apps(clients: &[Client]) -> Vec<&'static str> {
+/// Aplicaciones marcadas que están en marcha. Con `kill`, además las fuerza a cerrar.
+fn scan_apps(clients: &[Client], kill: bool) -> Vec<&'static str> {
     let selected = |prefix: &str| clients.iter().any(|client| client.key.starts_with(prefix));
     let (desktop, codex) = (selected("claude-desktop"), selected("codex"));
     if !desktop && !codex {
@@ -550,26 +549,69 @@ fn running_apps(clients: &[Client]) -> Vec<&'static str> {
         RefreshKind::nothing()
             .with_processes(ProcessRefreshKind::nothing().with_exe(UpdateKind::Always)),
     );
-    let (mut found_desktop, mut found_codex) = (false, false);
-    for process in system.processes().values() {
+    let own = std::process::id();
+    let mut apps = Vec::new();
+    for (pid, process) in system.processes() {
         let Some(exe) = process.exe() else {
             continue;
         };
         let text = exe.to_string_lossy().to_lowercase();
-        found_desktop |= desktop && is_claude_desktop(&text);
         let stem = exe
             .file_stem()
             .map(|stem| stem.to_string_lossy().to_lowercase());
-        found_codex |= codex && matches!(stem.as_deref(), Some("codex" | "chatgpt"));
+        let name = if desktop && is_claude_desktop(&text) {
+            "Claude Desktop"
+        } else if codex && matches!(stem.as_deref(), Some("codex" | "chatgpt")) {
+            "ChatGPT / Codex"
+        } else {
+            continue;
+        };
+        if pid.as_u32() == own {
+            continue;
+        }
+        if kill {
+            process.kill();
+        }
+        if !apps.contains(&name) {
+            apps.push(name);
+        }
     }
-    let mut apps = Vec::new();
-    if found_desktop {
-        apps.push("Claude Desktop");
-    }
-    if found_codex {
-        apps.push("ChatGPT / Codex");
-    }
+    apps.sort_unstable();
     apps
+}
+
+/// Las aplicaciones solo leen su configuración al arrancar: si alguna está abierta no se
+/// bloquea la instalación, pero hay que avisar de que debe reiniciarse.
+pub fn running_apps(clients: &[Client]) -> Vec<&'static str> {
+    scan_apps(clients, false)
+}
+
+/// Cierra a la fuerza las aplicaciones marcadas que estén abiertas (se pierden los borradores
+/// sin enviar). Solo se llama cuando el usuario lo pide.
+pub fn close_apps(clients: &[Client]) -> Result<String, String> {
+    let closed = scan_apps(clients, true);
+    if closed.is_empty() {
+        return Ok("No había aplicaciones abiertas.".into());
+    }
+    let mut remaining = closed.clone();
+    for _ in 0..15 {
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        remaining = scan_apps(clients, false);
+        if remaining.is_empty() {
+            break;
+        }
+    }
+    if remaining.is_empty() {
+        Ok(format!(
+            "Cerrado: {}. Ábrelo de nuevo para que cargue la conexión.",
+            closed.join(", ")
+        ))
+    } else {
+        Err(format!(
+            "No se pudo cerrar {}. Ciérralo tú del todo, también desde la bandeja.",
+            remaining.join(", ")
+        ))
+    }
 }
 
 fn is_claude_desktop(exe: &str) -> bool {
@@ -668,7 +710,6 @@ pub async fn install(
     progress("Probando la conexión con Moodle…");
     let info = check_account(account).await?;
     let _guard = lock(&paths.data)?;
-    let open_apps = running_apps(clients);
     let changes = installation_changes(paths, clients)?;
     progress("Instalando el servidor y conectando los clientes…");
     let servers = change_servers(paths, Some(SERVER))?;
@@ -679,16 +720,10 @@ pub async fn install(
     complete_servers(servers, result)?;
     sweep(paths);
     let mut message = format!(
-        "Conectado: {} en {}. Abre una sesión nueva en tus aplicaciones de IA.",
+        "Conectado: {} en {}. Abre una sesión nueva.",
         info["user"].as_str().unwrap_or("tu cuenta"),
         info["site"].as_str().unwrap_or("Moodle")
     );
-    if !open_apps.is_empty() {
-        message.push_str(&format!(
-            " Hay aplicaciones abiertas ({}): ciérralas del todo (también desde la bandeja) y ábrelas de nuevo para que carguen la conexión.",
-            open_apps.join(", ")
-        ));
-    }
     if let Some(missing) = info["missing_functions"].as_array()
         && !missing.is_empty()
     {
@@ -845,7 +880,6 @@ fn add_legacy_credentials(paths: &Paths, changes: &mut Vec<Change>) -> Result<()
 pub fn uninstall(paths: &Paths) -> Result<String, String> {
     let _guard = lock(&paths.data)?;
     let clients = paths.all_clients();
-    let open_apps = running_apps(&clients);
     let mut changes = clients
         .iter()
         .map(|client| Change::client(client, None))
@@ -874,16 +908,7 @@ pub fn uninstall(paths: &Paths) -> Result<String, String> {
         }
     });
     complete_servers(servers, result)?;
-    let mut message = String::from(
-        "Programa desconectado y token de esta instalación borrado. Se conservan los permisos y la cuenta del plugin. El token sigue siendo válido en Moodle hasta que lo restablezcas allí.",
-    );
-    if !open_apps.is_empty() {
-        message.push_str(&format!(
-            " Siguen abiertas ({}): reinícialas para que dejen de mostrar la conexión.",
-            open_apps.join(", ")
-        ));
-    }
-    Ok(message)
+    Ok("Desconectado. El token se borró de este equipo, pero sigue siendo válido en Moodle hasta que lo restablezcas allí.".into())
 }
 
 pub const PERMISSIONS: [(&str, &str); 5] = [

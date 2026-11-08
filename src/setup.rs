@@ -50,6 +50,9 @@ struct Setup {
     newer: Option<Release>,
     logo: Option<egui::TextureHandle>,
     focused: bool,
+    open_apps: Vec<&'static str>,
+    confirm_close: bool,
+    closing: bool,
 }
 
 impl Setup {
@@ -82,6 +85,9 @@ impl Setup {
             newer: None,
             logo,
             focused: true,
+            open_apps: Vec::new(),
+            confirm_close: false,
+            closing: false,
         };
         match credentials::read(&setup.paths.data, Kind::Installed) {
             Ok(Some(account)) => {
@@ -114,6 +120,24 @@ impl Setup {
                 client,
             })
             .collect();
+        if !self.open_apps.is_empty() {
+            self.open_apps = installer::running_apps(&self.selected_clients());
+        }
+    }
+
+    fn selected_clients(&self) -> Vec<Client> {
+        self.rows
+            .iter()
+            .filter(|row| row.selected)
+            .map(|row| row.client.clone())
+            .collect()
+    }
+
+    fn close_apps(&mut self, ctx: &egui::Context) {
+        let clients = self.selected_clients();
+        self.confirm_close = false;
+        self.closing = true;
+        self.start(ctx, move |_| installer::close_apps(&clients));
     }
 
     fn fail(&mut self, error: String) {
@@ -189,9 +213,15 @@ impl Setup {
                     Event::Progress(message) => self.message = message,
                     Event::Done(result) => {
                         self.task = None;
+                        let relevant = result.is_ok() || self.closing;
+                        self.closing = false;
                         self.error = result.is_err();
                         self.message = result.unwrap_or_else(|error| error);
+                        self.open_apps = Vec::new();
                         self.refresh();
+                        if relevant {
+                            self.open_apps = installer::running_apps(&self.selected_clients());
+                        }
                         self.saved_account = credentials::read(&self.paths.data, Kind::Installed)
                             .is_ok_and(|account| account.is_some());
                     }
@@ -220,7 +250,7 @@ impl Setup {
                     .inner_margin(egui::Margin::symmetric(22, 12)),
             )
             .show(ctx, |ui| {
-                self.status(ui, busy);
+                self.status(ui, ctx, busy);
                 ui.add_enabled_ui(!busy && !self.confirm_remove, |ui| {
                     self.actions(ui, ctx);
                 });
@@ -388,7 +418,7 @@ impl Setup {
         });
     }
 
-    fn status(&self, ui: &mut egui::Ui, busy: bool) {
+    fn status(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, busy: bool) {
         if busy {
             theme::notice(ui, theme::MUTED, theme::CARD, |ui| {
                 ui.spinner();
@@ -405,10 +435,35 @@ impl Setup {
                 (theme::GREEN, theme::GREEN_SOFT)
             };
             theme::notice(ui, color, fill, |ui| {
-                ui.label(&self.message);
+                ui.vertical(|ui| {
+                    ui.label(&self.message);
+                    if !self.open_apps.is_empty() {
+                        self.close_prompt(ui, ctx);
+                    }
+                });
             });
             ui.add_space(8.0);
         }
+    }
+
+    /// Ofrece cerrar las aplicaciones abiertas para que carguen la conexión, con confirmación.
+    fn close_prompt(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        ui.horizontal_wrapped(|ui| {
+            if self.confirm_close {
+                ui.label("¿Cerrar sin guardar borradores?");
+                if theme::link(ui, "Sí, cerrar").clicked() {
+                    self.close_apps(ctx);
+                }
+                if theme::link(ui, "No").clicked() {
+                    self.confirm_close = false;
+                }
+            } else {
+                ui.label(format!("Abiertas: {}.", self.open_apps.join(", ")));
+                if theme::link(ui, "Cerrar ahora").clicked() {
+                    self.confirm_close = true;
+                }
+            }
+        });
     }
 
     fn footer(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, busy: bool) {
@@ -567,7 +622,7 @@ fn main() -> eframe::Result {
         }
     };
     let mut viewport = egui::ViewportBuilder::default()
-        .with_inner_size([540.0, 640.0])
+        .with_inner_size([540.0, 680.0])
         .with_resizable(false)
         .with_maximize_button(false);
     if let Ok(icon) = eframe::icon_data::from_png_bytes(ICON) {
@@ -625,6 +680,9 @@ mod tests {
             }),
             logo: None,
             focused: true,
+            open_apps: vec!["Claude Desktop", "ChatGPT / Codex"],
+            confirm_close: true,
+            closing: false,
         };
         for size in [[460.0, 560.0], [560.0, 800.0]] {
             let output = ctx.run(
