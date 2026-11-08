@@ -28,7 +28,7 @@ En la ventana, introduce el campus y el token, marca los clientes y pulsa **Inst
 El token se oculta. Si dejas el campo vacío, solo se reutiliza una cuenta guardada
 por el programa para ese mismo campus. No hace falta cerrar nada antes: si una app de
 IA está usando el servidor, se aparta su copia y la app sigue con ella hasta que abras
-una sesión nueva; si Claude Desktop está abierto, avisa al terminar de que debe
+una sesión nueva; si alguna aplicación (Claude Desktop, ChatGPT o Codex) está abierta, avisa al terminar de que debe
 cerrarse del todo y abrirse de nuevo para cargar la conexión.
 
 El instalador comprueba Moodle antes de tocar la instalación y vuelve a comprobar

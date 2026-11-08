@@ -538,34 +538,50 @@ fn remove_tree(path: &Path) -> Result<(), String> {
     fs::remove_dir_all(path).map_err(|_| IO_ERROR.into())
 }
 
-/// Claude Desktop solo lee su configuración al arrancar: si está abierto, no bloquea la
-/// instalación, pero hay que avisar de que debe reiniciarse.
-fn claude_desktop_running(clients: &[Client]) -> bool {
-    if !clients
-        .iter()
-        .any(|client| client.key.starts_with("claude-desktop"))
-    {
-        return false;
+/// Las aplicaciones solo leen su configuración al arrancar: si alguna está abierta no se
+/// bloquea la instalación, pero hay que avisar de que debe reiniciarse.
+fn running_apps(clients: &[Client]) -> Vec<&'static str> {
+    let selected = |prefix: &str| clients.iter().any(|client| client.key.starts_with(prefix));
+    let (desktop, codex) = (selected("claude-desktop"), selected("codex"));
+    if !desktop && !codex {
+        return Vec::new();
     }
     let system = System::new_with_specifics(
         RefreshKind::nothing()
             .with_processes(ProcessRefreshKind::nothing().with_exe(UpdateKind::Always)),
     );
-    system.processes().values().any(|process| {
+    let (mut found_desktop, mut found_codex) = (false, false);
+    for process in system.processes().values() {
         let Some(exe) = process.exe() else {
-            return false;
+            continue;
         };
         let text = exe.to_string_lossy().to_lowercase();
-        (text.ends_with("\\claude.exe")
-            && [
-                "\\windowsapps\\claude_",
-                "\\anthropicclaude\\",
-                "\\programs\\claude\\",
-            ]
-            .iter()
-            .any(|part| text.contains(part)))
-            || text.contains("/claude.app/contents/macos/")
-    })
+        found_desktop |= desktop && is_claude_desktop(&text);
+        let stem = exe
+            .file_stem()
+            .map(|stem| stem.to_string_lossy().to_lowercase());
+        found_codex |= codex && matches!(stem.as_deref(), Some("codex" | "chatgpt"));
+    }
+    let mut apps = Vec::new();
+    if found_desktop {
+        apps.push("Claude Desktop");
+    }
+    if found_codex {
+        apps.push("ChatGPT / Codex");
+    }
+    apps
+}
+
+fn is_claude_desktop(exe: &str) -> bool {
+    (exe.ends_with("\\claude.exe")
+        && [
+            "\\windowsapps\\claude_",
+            "\\anthropicclaude\\",
+            "\\programs\\claude\\",
+        ]
+        .iter()
+        .any(|part| exe.contains(part)))
+        || exe.contains("/claude.app/contents/macos/")
 }
 
 /// Borra sin molestar los restos de instalaciones anteriores: copias que seguían en uso y
@@ -652,7 +668,7 @@ pub async fn install(
     progress("Probando la conexión con Moodle…");
     let info = check_account(account).await?;
     let _guard = lock(&paths.data)?;
-    let desktop_open = claude_desktop_running(clients);
+    let open_apps = running_apps(clients);
     let changes = installation_changes(paths, clients)?;
     progress("Instalando el servidor y conectando los clientes…");
     let servers = change_servers(paths, Some(SERVER))?;
@@ -667,10 +683,11 @@ pub async fn install(
         info["user"].as_str().unwrap_or("tu cuenta"),
         info["site"].as_str().unwrap_or("Moodle")
     );
-    if desktop_open {
-        message.push_str(
-            " Claude Desktop está abierto: ciérralo del todo (también desde la bandeja) y ábrelo de nuevo para que cargue la conexión.",
-        );
+    if !open_apps.is_empty() {
+        message.push_str(&format!(
+            " Hay aplicaciones abiertas ({}): ciérralas del todo (también desde la bandeja) y ábrelas de nuevo para que carguen la conexión.",
+            open_apps.join(", ")
+        ));
     }
     if let Some(missing) = info["missing_functions"].as_array()
         && !missing.is_empty()
@@ -828,7 +845,7 @@ fn add_legacy_credentials(paths: &Paths, changes: &mut Vec<Change>) -> Result<()
 pub fn uninstall(paths: &Paths) -> Result<String, String> {
     let _guard = lock(&paths.data)?;
     let clients = paths.all_clients();
-    let desktop_open = claude_desktop_running(&clients);
+    let open_apps = running_apps(&clients);
     let mut changes = clients
         .iter()
         .map(|client| Change::client(client, None))
@@ -860,10 +877,11 @@ pub fn uninstall(paths: &Paths) -> Result<String, String> {
     let mut message = String::from(
         "Programa desconectado y token de esta instalación borrado. Se conservan los permisos y la cuenta del plugin. El token sigue siendo válido en Moodle hasta que lo restablezcas allí.",
     );
-    if desktop_open {
-        message.push_str(
-            " Claude Desktop sigue abierto: reinícialo para que deje de mostrar la conexión.",
-        );
+    if !open_apps.is_empty() {
+        message.push_str(&format!(
+            " Siguen abiertas ({}): reinícialas para que dejen de mostrar la conexión.",
+            open_apps.join(", ")
+        ));
     }
     Ok(message)
 }
