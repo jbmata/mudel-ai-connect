@@ -112,8 +112,7 @@ Copia el token de servicios web, no el de RSS. En SIFO, el servicio utilizado es
 
 Introdúcelo en el instalador local o en el terminal de configuración del plugin.
 No lo pegues en el chat ni lo incluyas en un paquete o en el repositorio.
-Si el campus no ofrece una clave o una función necesaria, su soporte debe autorizar
-el acceso. El MCP utiliza estas funciones:
+El MCP utiliza estas funciones:
 
 ```text
 core_webservice_get_site_info
