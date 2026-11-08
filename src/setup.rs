@@ -18,6 +18,8 @@ use mudel_ai_connect_server::{
 mod theme;
 
 const LOGO: &[u8] = include_bytes!("../assets/logo-setup.png");
+/// Icono de la ventana y de la barra de tareas: con fondo blanco, para que se vea sobre barras oscuras.
+const ICON: &[u8] = include_bytes!("../assets/logo-icon.png");
 
 enum Event {
     Progress(String),
@@ -568,7 +570,7 @@ fn main() -> eframe::Result {
         .with_inner_size([540.0, 640.0])
         .with_resizable(false)
         .with_maximize_button(false);
-    if let Ok(icon) = eframe::icon_data::from_png_bytes(LOGO) {
+    if let Ok(icon) = eframe::icon_data::from_png_bytes(ICON) {
         viewport = viewport.with_icon(icon);
     }
     eframe::run_native(
