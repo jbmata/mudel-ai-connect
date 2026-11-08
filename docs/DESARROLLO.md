@@ -209,29 +209,6 @@ se marcan con `Zone.Identifier` en Windows y `com.apple.quarantine` en macOS.
 Si el sistema de archivos no permite esa marca, el resultado incluye un aviso.
 La herramienta no abre ni ejecuta los archivos descargados.
 
-## Conectar con tu universidad
-
-El botón de la ventana (`src/connect.rs`) obtiene el token iniciando sesión en la página del campus,
-como la app oficial de Moodle (`admin/tool/mobile/launch.php`):
-
-1. Genera un `passport` aleatorio de 16 bytes y abre `launch.php?service=moodle_mobile_app&passport=…&urlscheme=mudelai`
-   en el navegador.
-2. Durante el intento registra `mudelai://` en `HKCU\Software\Classes` (solo el usuario actual) y lo
-   elimina al terminar, al cancelar, al agotarse los 5 minutos o al cerrar la ventana.
-3. Moodle redirige a `mudelai://token=<base64>`. Windows lanza otra copia de `Mudel-AI-Connect-Setup.exe`
-   con esa dirección; esa copia solo deja el texto en `login-callback.txt` (carpeta de datos) y termina.
-4. La ventana que espera lo lee, comprueba que `siteid == md5(campus + passport)` (la respuesta
-   pertenece a este campus y a este intento, así que una web o un programa ajeno no puede colar un
-   token) y que el token es alfanumérico, y lanza la instalación con él. El token lo guarda
-   `installer::install`, como cuando se escribe a mano.
-
-Limitaciones: solo Windows (en macOS habría que recibir la dirección por eventos de la app); el
-campus debe ofrecer el servicio móvil y aceptar el esquema `mudelai://`; y **no se ha probado de
-punta a punta con un inicio de sesión real**, porque requiere las credenciales y el segundo
-factor del usuario. Sí están probados el cálculo de la firma, el rechazo de respuestas ajenas, el
-registro del esquema y que Windows lance la segunda copia con la dirección (que llega con una «/»
-añadida al final, caso que se contempla).
-
 ## Herramientas adicionales
 
 Todas son de solo lectura y usan las cinco categorías de permisos que ya existían: no se

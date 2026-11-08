@@ -106,21 +106,12 @@ todo el tema 3»).
 - **Documentación a actualizar** al terminar: `src/instructions.txt`, la skill de estudio,
   la tabla de herramientas del README, `docs/DESARROLLO.md` y el CHANGELOG.
 
-## Conectar con tu universidad
-
-Botón en la ventana para obtener el token iniciando sesión en la página oficial del campus, sin
-escribir la clave a mano. Estado: **implementado; falta probarlo con un inicio de sesión
-real** (ver el detalle en `docs/DESARROLLO.md`).
-
-- Comprobado en tu campus: `launch.php` existe y redirige al login sin dar nada; ofrece acceso con
-  Office 365, Google y EduGain.
-- Primer intento: la redirección a un esquema propio (`mudelai://`) no abrió nada en Chrome, así que
-  ahora la redirección va a un receptor local en `127.0.0.1`.
-- Pendiente: probarlo pulsando el botón (también en Mac) y comprobar que el campus acepta una
-  dirección `http://127.0.0.1` en `urlscheme`.
-
 ## No elegidas por ahora
 
+- Botón «Conectar con tu universidad» (iniciar sesión en el campus para obtener el token). Se
+  probó con la redirección a `mudelai://` de `launch.php`: Chrome la deja en blanco sin avisar, y
+  Moodle no admite una dirección local en `urlscheme` (solo un esquema de protocolo). Se descartó;
+  el token se introduce a mano.
 - OCR para PDF escaneados (alto esfuerzo y añade peso al instalador).
 - Cuestionarios: fechas, intentos y notas.
 - Caché local de archivos ya leídos.
