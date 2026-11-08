@@ -503,5 +503,194 @@ fn xlsx(pack: &mut Pack) -> Result<String, String> {
     Ok(out)
 }
 
+/// Una imagen incrustada en un documento de Office.
+pub struct Picture {
+    pub label: String,
+    pub extension: String,
+    pub data: Vec<u8>,
+}
+
+/// Lo que se puede mostrar de un documento de Office: sus imágenes incrustadas.
+#[derive(Default)]
+pub struct Pictures {
+    /// Diapositivas (PPTX) o imágenes (DOCX y XLSX) que tiene el documento.
+    pub total: usize,
+    pub found: Vec<Picture>,
+    /// Imágenes en formatos que no se pueden mostrar (EMF, WMF, SVG…).
+    pub unsupported: usize,
+    /// Gráficos y dibujos hechos con formas de Office, que no se pueden mostrar.
+    pub unrendered: usize,
+}
+
+const SHOWABLE: [&str; 5] = ["png", "jpg", "jpeg", "gif", "webp"];
+
+fn extension_of(path: &str) -> String {
+    path.rsplit_once('.')
+        .map(|(_, extension)| extension.to_ascii_lowercase())
+        .unwrap_or_default()
+}
+
+/// Identificadores de relación de las imágenes que cita un XML, en orden de aparición, y
+/// cuántos gráficos y dibujos con formas contiene (que no se pueden mostrar).
+fn embedded_in(xml: &[u8]) -> Result<(Vec<String>, usize), String> {
+    let mut ids: Vec<String> = Vec::new();
+    let mut unrendered = 0;
+    walk(xml, |event| {
+        if let Ev::Start(element) | Ev::Empty(element) = event {
+            match local(element) {
+                "blip" => {
+                    if let Some(id) = attribute(element, "embed")
+                        && !ids.contains(&id)
+                    {
+                        ids.push(id);
+                    }
+                }
+                "chart" | "cxnSp" | "custGeom" | "relIds" | "wsp" | "wpg" => unrendered += 1,
+                _ => (),
+            }
+        }
+        true
+    })?;
+    Ok((ids, unrendered))
+}
+
+/// Imágenes incrustadas de las partes pedidas: diapositivas en un PPTX, números de imagen
+/// (en orden de aparición) en un DOCX o un XLSX. La numeración empieza en 1.
+pub fn pictures(kind: Kind, body: &[u8], wanted: &[usize]) -> Result<Pictures, String> {
+    std::panic::catch_unwind(|| {
+        let mut pack = Pack::open(body)?;
+        match kind {
+            Kind::Pptx => slide_pictures(&mut pack, wanted),
+            Kind::Docx => document_pictures(&mut pack, wanted),
+            Kind::Xlsx => sheet_pictures(&mut pack, wanted),
+        }
+    })
+    .map_err(|_| String::from(INVALID))?
+}
+
+/// Lee una imagen del paquete: `None` si su formato no se puede mostrar.
+fn picture(pack: &mut Pack, path: &str, label: String) -> Result<Option<Picture>, String> {
+    let extension = extension_of(path);
+    if !SHOWABLE.contains(&extension.as_str()) {
+        return Ok(None);
+    }
+    Ok(pack.read(path)?.map(|data| Picture {
+        label,
+        extension,
+        data,
+    }))
+}
+
+fn slide_pictures(pack: &mut Pack, wanted: &[usize]) -> Result<Pictures, String> {
+    let mut slides: Vec<(u64, String)> = pack
+        .names()
+        .into_iter()
+        .filter_map(|name| number_in(&name, "ppt/slides/slide").map(|n| (n, name)))
+        .collect();
+    if slides.is_empty() {
+        return Err(INVALID.into());
+    }
+    slides.sort();
+    let mut result = Pictures {
+        total: slides.len(),
+        ..Pictures::default()
+    };
+    for &number in wanted {
+        let Some((_, name)) = slides.iter().find(|(n, _)| *n == number as u64) else {
+            return Err(format!(
+                "La diapositiva {number} no existe. Las diapositivas son {}.",
+                slides
+                    .iter()
+                    .map(|(n, _)| n.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        };
+        let xml = pack.read(name)?.ok_or(INVALID)?;
+        let (ids, unrendered) = embedded_in(&xml)?;
+        result.unrendered += unrendered;
+        let rels = pack
+            .read(&format!("ppt/slides/_rels/slide{number}.xml.rels"))?
+            .map(|bytes| relationships(&bytes))
+            .unwrap_or_default();
+        let mut index = 0;
+        for id in ids {
+            let Some((_, target, _)) = rels
+                .iter()
+                .find(|(rid, _, kind)| *rid == id && kind.ends_with("/image"))
+            else {
+                continue;
+            };
+            index += 1;
+            let path = resolve("ppt/slides", target);
+            let label = format!("Diapositiva {number}, imagen {index}");
+            match picture(pack, &path, label)? {
+                Some(found) => result.found.push(found),
+                None => result.unsupported += 1,
+            }
+        }
+    }
+    Ok(result)
+}
+
+fn document_pictures(pack: &mut Pack, wanted: &[usize]) -> Result<Pictures, String> {
+    let xml = pack.read("word/document.xml")?.ok_or(INVALID)?;
+    let (ids, unrendered) = embedded_in(&xml)?;
+    let rels = pack
+        .read("word/_rels/document.xml.rels")?
+        .map(|bytes| relationships(&bytes))
+        .unwrap_or_default();
+    let paths: Vec<String> = ids
+        .iter()
+        .filter_map(|id| {
+            rels.iter()
+                .find(|(rid, _, kind)| rid == id && kind.ends_with("/image"))
+                .map(|(_, target, _)| resolve("word", target))
+        })
+        .collect();
+    numbered_pictures(pack, &paths, wanted, unrendered)
+}
+
+fn sheet_pictures(pack: &mut Pack, wanted: &[usize]) -> Result<Pictures, String> {
+    let mut paths: Vec<String> = pack
+        .names()
+        .into_iter()
+        .filter(|name| name.starts_with("xl/media/"))
+        .collect();
+    paths.sort();
+    let charts = pack
+        .names()
+        .iter()
+        .filter(|name| name.starts_with("xl/charts/chart"))
+        .count();
+    numbered_pictures(pack, &paths, wanted, charts)
+}
+
+fn numbered_pictures(
+    pack: &mut Pack,
+    paths: &[String],
+    wanted: &[usize],
+    unrendered: usize,
+) -> Result<Pictures, String> {
+    let mut result = Pictures {
+        total: paths.len(),
+        unrendered,
+        ..Pictures::default()
+    };
+    for &number in wanted {
+        let Some(path) = number.checked_sub(1).and_then(|index| paths.get(index)) else {
+            return Err(format!(
+                "La imagen {number} no existe. El documento tiene {} imágenes.",
+                paths.len()
+            ));
+        };
+        match picture(pack, path, format!("Imagen {number}"))? {
+            Some(found) => result.found.push(found),
+            None => result.unsupported += 1,
+        }
+    }
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests;

@@ -19,6 +19,11 @@ Pensada para un grupo reducido de pruebas que pueda informar de fallos.
   Excel (XLSX), HTML, texto, páginas y libros de Moodle (`read_course_file`, y
   `read_course_files` para hasta 6 archivos a la vez). Los formatos antiguos (`.doc`, `.ppt`,
   `.xls`) se rechazan con un aviso claro.
+- `view_course_file`: muestra figuras como imágenes para que la IA pueda leer circuitos, gráficas y
+  esquemas. Dibuja páginas de PDF (hasta 4 por consulta) y devuelve las imágenes incrustadas de
+  PPTX, DOCX y XLSX o una imagen suelta (PNG, JPG, GIF, WEBP). Los dibujos hechos con formas de
+  PowerPoint, los gráficos de Office y los formatos EMF, WMF y SVG no se pueden mostrar, y avisa
+  de ello.
 - `download_course_file`: guarda un archivo del curso, en cualquier formato, en
   `Descargas/Mudel AI Connect/<asignatura>` (o en la carpeta que elijas en **Permisos**). No
   sobrescribe nada, reutiliza el archivo si ya está igual y lo marca como descargado de

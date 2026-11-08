@@ -26,7 +26,7 @@ consultar materiales como distribuir su estudio. Recupera solo los datos necesar
 ## Elegir el curso y cargar contexto
 
 - Busca las herramientas `list_courses`, `get_course_context`, `search_course`,
-  `read_course_file`, `read_course_files`, `download_course_file`, `list_assignments`,
+  `read_course_file`, `read_course_files`, `view_course_file`, `download_course_file`, `list_assignments`,
   `get_assignment_status`, `get_grades`, `list_forums`, `get_forum_discussions`,
   `get_discussion_posts`, `get_upcoming_events` y `moodle_status` en el MCP conectado.
   El cliente puede añadir un prefijo a los nombres. Si no están disponibles,
@@ -46,6 +46,12 @@ consultar materiales como distribuir su estudio. Recupera solo los datos necesar
   `read_course_files` (hasta 6) y continúa con `read_course_file` si hace falta más. Usa el `module_id` del
   módulo y el `file_index` que devolvió el MCP; conserva ese índice aunque otros
   elementos de `contents` sean enlaces. Sigue `next_offset` si necesitas el resto.
+- Si la respuesta depende de una figura (circuito, gráfica, esquema, diagrama) que el texto no
+  recoge, usa `view_course_file` con el mismo `module_id` y `file_index` y las páginas
+  (PDF), diapositivas (PPTX) o números de imagen (DOCX y XLSX) que necesites, hasta 4 por
+  consulta. Recibirás las imágenes: descríbelas y razona sobre ellas solo con lo que se ve, y
+  avisa si algo no se distingue. Los dibujos hechos con formas de PowerPoint y los gráficos de
+  Office no se pueden mostrar; si hace falta verlos, pide el PDF del material.
 - Las descripciones e introducciones pueden estar recortadas a 4.000 caracteres;
   el listado de archivos no sustituye a su lectura. Un enlace externo, un PDF
   escaneado o un formato no admitido puede requerir que el usuario aporte el material.

@@ -248,6 +248,7 @@ fn real_process_discovers_tools_and_rejects_invalid_calls() {
             "read_course_file",
             "read_course_files",
             "search_course",
+            "view_course_file",
         ]
     );
     for tool in tools {
@@ -284,6 +285,19 @@ fn real_process_discovers_tools_and_rejects_invalid_calls() {
         ("search_course", json!({"query": "tema", "course_id": 0})),
         ("read_course_files", json!({"course_id": 7, "files": []})),
         ("read_course_file", json!({"course_id": 7, "module_id": -1})),
+        ("view_course_file", json!({"course_id": 7, "module_id": -1})),
+        (
+            "view_course_file",
+            json!({"course_id": 7, "module_id": 9, "pages": []}),
+        ),
+        (
+            "view_course_file",
+            json!({"course_id": 7, "module_id": 9, "pages": [1, 2, 3, 4, 5]}),
+        ),
+        (
+            "view_course_file",
+            json!({"course_id": 7, "module_id": 9, "page": 2}),
+        ),
         (
             "download_course_file",
             json!({"course_id": 7, "module_id": 90, "path": "/tmp/arbitrary"}),

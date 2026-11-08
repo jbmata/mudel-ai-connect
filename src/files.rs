@@ -99,6 +99,31 @@ pub async fn read_many(client: &MoodleClient, params: ReadFiles) -> Result<Value
         "note": "Solo se devuelve el primer fragmento de cada archivo; sigue con read_course_file y next_offset."}))
 }
 
+/// Descarga un archivo del curso (hasta 10 MiB) y rechaza las respuestas JSON de error de Moodle.
+pub(crate) async fn fetch(
+    client: &MoodleClient,
+    item: &Value,
+) -> Result<(Vec<u8>, String), String> {
+    if item["filesize"]
+        .as_u64()
+        .is_some_and(|size| size > MAX_BYTES as u64)
+    {
+        return Err("El archivo supera el límite de 10 MiB.".into());
+    }
+    let mut body = Vec::new();
+    let content_type = client
+        .save(
+            item["fileurl"].as_str().ok_or(FORMAT_ERROR)?,
+            &mut body,
+            MAX_BYTES,
+        )
+        .await?;
+    if content_type.contains("json") {
+        return Err(DOWNLOAD_ERROR.into());
+    }
+    Ok((body, content_type))
+}
+
 async fn read_item(
     client: &MoodleClient,
     module: &Value,
@@ -121,23 +146,7 @@ async fn read_item(
             str::to_string,
         ));
     }
-    if item["filesize"]
-        .as_u64()
-        .is_some_and(|size| size > MAX_BYTES as u64)
-    {
-        return Err("El archivo supera el límite de 10 MiB.".into());
-    }
-    let mut body = Vec::new();
-    let content_type = client
-        .save(
-            item["fileurl"].as_str().ok_or(FORMAT_ERROR)?,
-            &mut body,
-            MAX_BYTES,
-        )
-        .await?;
-    if content_type.contains("json") {
-        return Err(DOWNLOAD_ERROR.into());
-    }
+    let (body, content_type) = fetch(client, item).await?;
     let document = if let Some(kind) = office_kind {
         if !body.starts_with(b"PK") {
             return Err(

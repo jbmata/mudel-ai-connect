@@ -17,10 +17,13 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::credentials;
+use base64::{Engine, prelude::BASE64_STANDARD};
+
 use crate::files::{self, CourseFile, ReadFile, ReadFiles};
 use crate::moodle::{
     FORMAT_ERROR, FUNCTIONS, MoodleClient, array, id, optional_array, plain, text, utc,
 };
+use crate::view::{self, ViewFile};
 use unicode_normalization::{UnicodeNormalization, char::is_combining_mark};
 
 const PERMISSION_ERROR: &str =
@@ -696,7 +699,7 @@ impl MoodleServer {
     }
 
     #[tool(
-        description = "Lee un PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), HTML o texto de un módulo del curso; también las páginas de Moodle. Usa los IDs e índices de get_course_context y pagina con next_offset.",
+        description = "Lee un PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), HTML o texto de un módulo del curso; también las páginas de Moodle. Usa los IDs e índices de get_course_context y pagina con next_offset. Las figuras no salen en el texto: para verlas usa view_course_file.",
         annotations(
             read_only_hint = true,
             destructive_hint = false,
@@ -707,6 +710,29 @@ impl MoodleServer {
     async fn read_course_file(&self, Parameters(params): Parameters<ReadFile>) -> CallToolResult {
         let result = async { files::read(self.client(Some("materials"))?, params).await }.await;
         self.result(result)
+    }
+
+    #[tool(
+        description = "Muestra como imágenes las figuras de un material: páginas de un PDF (circuitos, gráficas, esquemas), imágenes incrustadas en diapositivas PPTX, DOCX o XLSX, o una imagen suelta. Usa los IDs de get_course_context y pide hasta 4 páginas o diapositivas con `pages`. Úsala cuando read_course_file no baste porque el contenido está en un dibujo.",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = true
+        )
+    )]
+    async fn view_course_file(&self, Parameters(params): Parameters<ViewFile>) -> CallToolResult {
+        let result = async { view::view(self.client(Some("materials"))?, params).await }.await;
+        match result {
+            Ok(views) => {
+                let mut content = vec![ContentBlock::text(views.info.to_string())];
+                content.extend(views.images.into_iter().map(|image| {
+                    ContentBlock::image(BASE64_STANDARD.encode(&image.data), image.mime)
+                }));
+                CallToolResult::success(content)
+            }
+            Err(error) => CallToolResult::error(vec![ContentBlock::text(error)]),
+        }
     }
 
     #[tool(

@@ -106,6 +106,13 @@ todo el tema 3»).
 - **Documentación a actualizar** al terminar: `src/instructions.txt`, la skill de estudio,
   la tabla de herramientas del README, `docs/DESARROLLO.md` y el CHANGELOG.
 
+## Ver figuras (hecho)
+
+`view_course_file` muestra páginas de PDF dibujadas (circuitos, gráficas, esquemas) e imágenes
+incrustadas de PPTX, DOCX y XLSX. Queda fuera: dibujos hechos con formas de PowerPoint, gráficos de
+Office y formatos EMF, WMF y SVG. Una opción posible, no implementada: convertir PPTX y DOCX a PDF
+con LibreOffice si está instalado y dibujar esas páginas.
+
 ## No elegidas por ahora
 
 - Botón «Conectar con tu universidad» (iniciar sesión en el campus para obtener el token). Se

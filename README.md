@@ -82,6 +82,7 @@ MCP-MOODLE/
 | `get_upcoming_events` | Consultar los próximos eventos del calendario. |
 | `read_course_file` | Extraer texto de PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), TXT, MD, CSV y HTML del curso, incluidas las páginas y los libros de Moodle. |
 | `read_course_files` | Leer a la vez hasta 6 archivos de un curso (primer fragmento de cada uno). |
+| `view_course_file` | Ver como imágenes las figuras de un material: páginas de un PDF (circuitos, gráficas, esquemas), imágenes de diapositivas PPTX, DOCX y XLSX, o una imagen suelta. Hasta 4 por consulta. |
 | `search_course` | Buscar un texto en secciones, módulos y nombres de archivo de un curso o de todas tus asignaturas. |
 | `list_forums` | Listar los foros de un curso; el de tipo `news` tiene los avisos del profesor. |
 | `get_forum_discussions` | Leer las discusiones de un foro con su mensaje inicial. |
@@ -126,7 +127,7 @@ También necesita permiso para descargar archivos del servicio.
 
 ## Desarrollo y pruebas
 
-Se necesita Rust 1.89 o superior. Desde la raíz del repositorio:
+Se necesita Rust 1.92 o superior. Desde la raíz del repositorio:
 
 ```powershell
 cargo test --locked --features desktop
