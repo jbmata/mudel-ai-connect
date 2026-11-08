@@ -47,6 +47,7 @@ struct Setup {
     update_check: Option<Receiver<Option<Release>>>,
     newer: Option<Release>,
     logo: Option<egui::TextureHandle>,
+    focused: bool,
 }
 
 impl Setup {
@@ -78,6 +79,7 @@ impl Setup {
             update_check: Some(check_for_updates(ctx)),
             newer: None,
             logo,
+            focused: true,
         };
         match credentials::read(&setup.paths.data, Kind::Installed) {
             Ok(Some(account)) => {
@@ -199,6 +201,12 @@ impl Setup {
 
     fn show(&mut self, ctx: &egui::Context) {
         self.poll(ctx);
+        // Al volver a la ventana se revisa qué aplicaciones hay instaladas y su estado.
+        let focused = ctx.input(|input| input.viewport().focused.unwrap_or(true));
+        if focused && !self.focused && self.task.is_none() {
+            self.refresh();
+        }
+        self.focused = focused;
         let busy = self.task.is_some();
         if busy && ctx.input(|input| input.viewport().close_requested()) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
@@ -302,8 +310,7 @@ impl Setup {
                 egui::TextEdit::singleline(&mut self.token)
                     .password(true)
                     .desired_width(f32::INFINITY)
-                    .margin(egui::Margin::symmetric(8, 6))
-                    .hint_text("Vacío: conservar la cuenta guardada para este campus"),
+                    .margin(egui::Margin::symmetric(8, 6)),
             )
             .labelled_by(label.id);
             ui.horizontal(|ui| {
@@ -321,17 +328,10 @@ impl Setup {
 
     fn apps_panel(&mut self, ui: &mut egui::Ui) {
         theme::panel(ui, |ui| {
-            ui.horizontal(|ui| {
-                theme::section(ui, "Aplicaciones");
-                theme::right(ui, |ui| {
-                    if theme::link(ui, "Actualizar lista").clicked() {
-                        self.refresh();
-                    }
-                });
-            });
+            theme::section(ui, "Aplicaciones");
             if self.rows.is_empty() {
                 ui.label(theme::muted(
-                    "Abre una vez Claude Desktop, Claude Code o Codex y actualiza la lista.",
+                    "Abre una vez Claude Desktop, Claude Code o Codex y vuelve a esta ventana.",
                 ));
             }
             for row in &mut self.rows {
@@ -622,6 +622,7 @@ mod tests {
                 url: "https://github.com/jbmata/mudel-ai-connect/releases/tag/v9.9.9".into(),
             }),
             logo: None,
+            focused: true,
         };
         for size in [[460.0, 560.0], [560.0, 800.0]] {
             let output = ctx.run(
