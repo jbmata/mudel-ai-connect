@@ -555,3 +555,77 @@ async fn null_and_numeric_fields_from_moodle_do_not_break_the_new_tools() {
     assert_eq!(value["discussions"][0]["title"], "");
     handle.join().unwrap();
 }
+
+#[tokio::test]
+async fn guided_prompts_name_the_right_tools_and_fill_in_their_arguments() {
+    let (client, _requests, _handle) = mock(vec![]);
+    let server = server(client);
+    let text = |messages: Vec<PromptMessage>| {
+        serde_json::to_value(&messages[0]).unwrap()["content"]["text"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    let exam = text(
+        server
+            .preparar_examen(Parameters(Exam {
+                course_id: "7".into(),
+                tema: Some("termopares".into()),
+            }))
+            .await,
+    );
+    assert!(exam.starts_with(INSTRUCTIONS));
+    assert!(exam.contains("Curso solicitado: 7.\nTema: termopares."));
+    for tool in ["search_course", "read_course_file", "view_course_file"] {
+        assert!(exam.contains(tool), "{tool}");
+    }
+    assert!(exam.contains("No muestres las soluciones hasta que el usuario responda"));
+    let whole = text(
+        server
+            .preparar_examen(Parameters(Exam {
+                course_id: "7".into(),
+                tema: None,
+            }))
+            .await,
+    );
+    assert!(whole.contains("Tema: todo el temario."));
+
+    let plan = text(
+        server
+            .plan_de_estudio(Parameters(Plan {
+                course_id: None,
+                hasta: None,
+            }))
+            .await,
+    );
+    assert!(
+        plan.contains("Curso: todas mis asignaturas.\nFecha límite: la próxima entrega o examen.")
+    );
+    for tool in [
+        "get_upcoming_events",
+        "list_assignments",
+        "get_assignment_status",
+    ] {
+        assert!(plan.contains(tool), "{tool}");
+    }
+    let dated = text(
+        server
+            .plan_de_estudio(Parameters(Plan {
+                course_id: Some("7".into()),
+                hasta: Some("el 20 de noviembre".into()),
+            }))
+            .await,
+    );
+    assert!(dated.contains("Curso: 7.\nFecha límite: el 20 de noviembre."));
+
+    let summary = text(
+        server
+            .resumir_tema(Parameters(Topic {
+                course_id: "7".into(),
+                tema: "Tema 3".into(),
+            }))
+            .await,
+    );
+    assert!(summary.contains("Curso solicitado: 7.\nTema: Tema 3."));
+    assert!(summary.contains("read_course_files"));
+}

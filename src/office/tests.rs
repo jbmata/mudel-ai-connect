@@ -179,3 +179,60 @@ fn a_zip_bomb_is_refused_without_exhausting_memory() {
             .contains("demasiado")
     );
 }
+
+#[test]
+fn figures_are_flagged_in_the_text_of_slides_documents_and_workbooks() {
+    let slide = |body: &str| {
+        format!(
+            r#"<p:sld xmlns:p="x" xmlns:a="{A}" xmlns:r="r"><p:cSld><p:spTree><p:sp><p:txBody>
+            <a:p><a:r><a:t>Texto</a:t></a:r></a:p></p:txBody></p:sp>{body}</p:spTree></p:cSld></p:sld>"#
+        )
+    };
+    let pptx = archive(&[
+        (
+            "ppt/slides/slide1.xml",
+            &slide(
+                r#"<p:pic><a:blip r:embed="rId2"/></p:pic><p:pic><a:blip r:embed="rId3"/></p:pic><p:cxnSp/>"#,
+            ),
+        ),
+        ("ppt/slides/slide2.xml", &slide("")),
+    ]);
+    let text = extract(Kind::Pptx, &pptx).unwrap();
+    assert!(
+        text.contains(
+            "Texto\n[figuras: 2 imágenes y dibujos o gráficos; se ven con view_course_file]"
+        ),
+        "{text}"
+    );
+    assert_eq!(text.matches("[figuras").count(), 1, "{text}");
+
+    let document = format!(
+        r#"<w:document xmlns:w="{W}" xmlns:a="{A}" xmlns:r="r"><w:body><w:p>{}</w:p><w:p><a:blip r:embed="rId1"/></w:p></w:body></w:document>"#,
+        run("Hola")
+    );
+    let docx = extract(Kind::Docx, &archive(&[("word/document.xml", &document)])).unwrap();
+    assert!(
+        docx.ends_with("[figuras: 1 imagen; se ven con view_course_file]"),
+        "{docx}"
+    );
+
+    let sheet = format!(
+        r#"<worksheet xmlns="{S}"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>x</t></is></c></row></sheetData></worksheet>"#
+    );
+    let workbook = format!(
+        r#"<workbook xmlns="{S}" xmlns:r="r"><sheets><sheet name="Datos" sheetId="1" r:id="rId1"/></sheets></workbook>"#
+    );
+    let rels = r#"<Relationships xmlns="r"><Relationship Id="rId1" Type="http://x/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#;
+    let xlsx = archive(&[
+        ("xl/workbook.xml", &workbook),
+        ("xl/_rels/workbook.xml.rels", rels),
+        ("xl/worksheets/sheet1.xml", &sheet),
+        ("xl/media/image1.png", "x"),
+        ("xl/charts/chart1.xml", "<c/>"),
+    ]);
+    let text = extract(Kind::Xlsx, &xlsx).unwrap();
+    assert!(
+        text.contains("[figuras: 1 imágenes y 1 gráficos;"),
+        "{text}"
+    );
+}

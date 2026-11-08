@@ -242,7 +242,37 @@ fn docx(pack: &mut Pack) -> Result<String, String> {
     let xml = pack.read("word/document.xml")?.ok_or(INVALID)?;
     let mut out = String::new();
     rich_text(&xml, &mut out)?;
+    if let Some(marker) = figure_marker(&xml) {
+        out.push_str(&format!(
+            "
+{marker}
+"
+        ));
+    }
     Ok(out)
+}
+
+/// Aviso de que un trozo del documento tiene imágenes o dibujos que el texto no recoge.
+fn figure_marker(xml: &[u8]) -> Option<String> {
+    let (ids, unrendered) = embedded_in(xml).ok()?;
+    let mut parts = Vec::new();
+    if !ids.is_empty() {
+        let noun = if ids.len() == 1 {
+            "imagen"
+        } else {
+            "imágenes"
+        };
+        parts.push(format!("{} {noun}", ids.len()));
+    }
+    if unrendered > 0 {
+        parts.push("dibujos o gráficos".to_string());
+    }
+    (!parts.is_empty()).then(|| {
+        format!(
+            "[figuras: {}; se ven con view_course_file]",
+            parts.join(" y ")
+        )
+    })
 }
 
 /// Resuelve `target` relativo al directorio de `from` (`ppt/slides` + `../notesSlides/x.xml`).
@@ -306,13 +336,18 @@ fn pptx(pack: &mut Pack) -> Result<String, String> {
     for (number, name) in slides {
         out.push_str(&format!("\n--- Diapositiva {number} ---\n"));
         let mut text = String::new();
+        let mut marker = None;
         if let Some(xml) = pack.read(&name)? {
             rich_text(&xml, &mut text)?;
+            marker = figure_marker(&xml);
         }
         if tidy(&text).is_empty() {
             out.push_str("(sin texto)\n");
         } else {
             out.push_str(&text);
+        }
+        if let Some(marker) = marker {
+            out.push_str(&format!("{marker}\n"));
         }
         let rels = pack.read(&format!("ppt/slides/_rels/slide{number}.xml.rels"))?;
         let notes = rels.map(|bytes| {
@@ -499,6 +534,30 @@ fn xlsx(pack: &mut Pack) -> Result<String, String> {
         if out.len() >= MAX_CHARS {
             break;
         }
+    }
+    let names = pack.names();
+    let images = names
+        .iter()
+        .filter(|name| name.starts_with("xl/media/"))
+        .count();
+    let charts = names
+        .iter()
+        .filter(|name| name.starts_with("xl/charts/chart"))
+        .count();
+    if images + charts > 0 {
+        let mut parts = Vec::new();
+        if images > 0 {
+            parts.push(format!("{images} imágenes"));
+        }
+        if charts > 0 {
+            parts.push(format!("{charts} gráficos"));
+        }
+        out.push_str(&format!(
+            "
+[figuras: {}; las imágenes se ven con view_course_file]
+",
+            parts.join(" y ")
+        ));
     }
     Ok(out)
 }

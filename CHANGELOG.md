@@ -24,6 +24,10 @@ Pensada para un grupo reducido de pruebas que pueda informar de fallos.
   PPTX, DOCX y XLSX o una imagen suelta (PNG, JPG, GIF, WEBP). Los dibujos hechos con formas de
   PowerPoint, los gráficos de Office y los formatos EMF, WMF y SVG no se pueden mostrar, y avisa
   de ello.
+- Aviso de figuras: al leer un PDF, `read_course_file` indica qué páginas tienen imágenes o dibujos (se
+  detectan interpretando la página sin dibujarla); en PPTX, DOCX y XLSX lo marca en el propio texto.
+  Un PDF sin texto (escaneado) sugiere verlo con `view_course_file` en lugar de pedir OCR.
+- Preguntas guiadas (prompts MCP): `preparar_examen`, `plan_de_estudio` y `resumir_tema`.
 - `save_course_figures`: guarda esas mismas figuras en `Descargas/Mudel AI Connect/<asignatura>` y
   devuelve la ruta, para que el usuario las abra aunque su cliente no muestre las imágenes del chat.
 - `download_course_file`: guarda un archivo del curso, en cualquier formato, en

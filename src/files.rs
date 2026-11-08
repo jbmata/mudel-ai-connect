@@ -147,6 +147,7 @@ async fn read_item(
         ));
     }
     let (body, content_type) = fetch(client, item).await?;
+    let mut figures = None;
     let document = if let Some(kind) = office_kind {
         if !body.starts_with(b"PK") {
             return Err(
@@ -160,9 +161,20 @@ async fn read_item(
         if !body.starts_with(b"%PDF-") {
             return Err("La respuesta no es un PDF. Comprueba el acceso al archivo.".into());
         }
-        tokio::task::spawn_blocking(move || pdf_text(&body))
-            .await
-            .map_err(|_| "No se pudo extraer el texto de este PDF.")??
+        let (text, found) = tokio::task::spawn_blocking(move || {
+            let text = pdf_text(&body)?;
+            // Solo en el primer fragmento: avisa de las páginas con figuras que el texto no recoge.
+            let found = if offset == 0 {
+                crate::figures::pdf(&body)
+            } else {
+                None
+            };
+            Ok::<_, String>((text, found))
+        })
+        .await
+        .map_err(|_| "No se pudo extraer el texto de este PDF.")??;
+        figures = found;
+        text
     } else {
         let document = String::from_utf8_lossy(body.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&body))
             .into_owned();
@@ -182,10 +194,12 @@ async fn read_item(
     let next = offset
         .checked_add(limit as u64)
         .filter(|end| *end < total as u64);
-    Ok(client.clean(
-        json!({"filename": name, "source_url": item["fileurl"], "module_url": module["url"],
-        "text": content, "total_characters": total, "offset": offset, "next_offset": next}),
-    ))
+    let mut result = json!({"filename": name, "source_url": item["fileurl"], "module_url": module["url"],
+        "text": content, "total_characters": total, "offset": offset, "next_offset": next});
+    if let Some(figures) = figures {
+        result["figures"] = figures;
+    }
+    Ok(client.clean(result))
 }
 
 fn pdf_text(body: &[u8]) -> Result<String, String> {
@@ -203,7 +217,7 @@ fn pdf_text(body: &[u8]) -> Result<String, String> {
             .map_err(|_| "No se pudo extraer el texto de este PDF.")?;
         if document.trim().is_empty() {
             return Err(
-                "El PDF no tiene texto extraíble; puede ser un escaneo y requerir OCR.".into(),
+                "El PDF no tiene texto que se pueda extraer; puede ser un escaneo. Usa view_course_file para verlo como imagen y leerlo.".into(),
             );
         }
         Ok(document)

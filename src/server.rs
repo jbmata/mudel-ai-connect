@@ -902,6 +902,24 @@ pub struct Study {
     pregunta: Option<String>,
 }
 
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct Exam {
+    course_id: String,
+    tema: Option<String>,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct Plan {
+    course_id: Option<String>,
+    hasta: Option<String>,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct Topic {
+    course_id: String,
+    tema: String,
+}
+
 #[prompt_router]
 impl MoodleServer {
     #[prompt(
@@ -917,6 +935,51 @@ impl MoodleServer {
             format!(
                 "{INSTRUCTIONS}\nCurso solicitado: {}.\nPetición del usuario: {pregunta}\nCarga el contexto del curso y lee los materiales relevantes. Separa lo que aparece en las fuentes de tu explicación y cita sus enlaces.",
                 params.course_id
+            ),
+        )]
+    }
+
+    #[prompt(
+        description = "Prepara un test de práctica con las pruebas y exámenes anteriores de una asignatura."
+    )]
+    async fn preparar_examen(&self, Parameters(params): Parameters<Exam>) -> Vec<PromptMessage> {
+        let tema = params.tema.as_deref().unwrap_or("todo el temario");
+        vec![PromptMessage::new_text(
+            Role::User,
+            format!(
+                "{INSTRUCTIONS}\nCurso solicitado: {}.\nTema: {tema}.\nBusca con search_course las pruebas, exámenes, parciales y finales anteriores de esta asignatura, con sus soluciones si existen. Léelos con read_course_file y, si hay circuitos, gráficas o esquemas, míralos con view_course_file. Con ellos prepara un test de práctica de unas 10 preguntas del estilo de esas pruebas sobre el tema indicado. No muestres las soluciones hasta que el usuario responda; después corrígelo, explica los fallos y cita la prueba de la que sale cada pregunta con su enlace. Si no hay pruebas anteriores, dilo y propón las preguntas solo a partir de los materiales, indicándolo.",
+                params.course_id
+            ),
+        )]
+    }
+
+    #[prompt(
+        description = "Propone un plan de estudio por días hasta la próxima entrega o examen."
+    )]
+    async fn plan_de_estudio(&self, Parameters(params): Parameters<Plan>) -> Vec<PromptMessage> {
+        let curso = params
+            .course_id
+            .as_deref()
+            .unwrap_or("todas mis asignaturas");
+        let hasta = params
+            .hasta
+            .as_deref()
+            .unwrap_or("la próxima entrega o examen");
+        vec![PromptMessage::new_text(
+            Role::User,
+            format!(
+                "{INSTRUCTIONS}\nCurso: {curso}.\nFecha límite: {hasta}.\nConsulta get_upcoming_events y list_assignments, y get_assignment_status para saber qué está ya entregado, para conocer las fechas. Con get_course_context revisa qué materiales quedan por estudiar. Propón un plan por días hasta la fecha límite, realista y con el tiempo estimado de cada bloque, y cita los enlaces de las fechas y de los materiales. No inventes fechas que no aparezcan en Moodle."
+            ),
+        )]
+    }
+
+    #[prompt(description = "Resume un tema de una asignatura con sus materiales y fuentes.")]
+    async fn resumir_tema(&self, Parameters(params): Parameters<Topic>) -> Vec<PromptMessage> {
+        vec![PromptMessage::new_text(
+            Role::User,
+            format!(
+                "{INSTRUCTIONS}\nCurso solicitado: {}.\nTema: {}.\nLocaliza los materiales de ese tema con search_course y get_course_context, léelos con read_course_files o read_course_file y mira las figuras importantes con view_course_file. Haz un resumen estructurado con las ideas clave, las fórmulas o definiciones que aparezcan y las dudas habituales. Separa lo que dicen las fuentes de tu explicación y cita el enlace de cada material.",
+                params.course_id, params.tema
             ),
         )]
     }

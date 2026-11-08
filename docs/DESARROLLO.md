@@ -7,7 +7,7 @@ Los paquetes siguen siendo experimentales hasta publicarlos firmados.
 
 Las siete herramientas básicas son `moodle_status`, `list_courses`,
 `get_course_context`, `list_assignments`, `get_upcoming_events`, `read_course_file`
-y `download_course_file`, y el prompt `estudiar_curso`, usando el
+y `download_course_file`, y los prompts `estudiar_curso`, `preparar_examen`, `plan_de_estudio` y `resumir_tema`, usando el
 [SDK oficial de MCP para Rust](https://github.com/modelcontextprotocol/rust-sdk).
 Una muestra de Moodle y sus resultados de referencia (`tests/fixtures/`) comprueban el servidor.
 El espaciado del texto extraído de un PDF puede variar según el documento.

@@ -73,7 +73,7 @@ fn valid_pdf_text_is_read_and_encrypted_blank_or_broken_pdfs_are_rejected() {
     assert!(
         pdf_text(include_bytes!("../../tests/fixtures/blank.pdf"))
             .unwrap_err()
-            .contains("OCR")
+            .contains("view_course_file")
     );
     assert!(pdf_text(b"%PDF-1.7 roto").is_err());
     let malformed = String::from_utf8_lossy(body)

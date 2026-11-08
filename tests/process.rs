@@ -310,6 +310,19 @@ fn real_process_discovers_tools_and_rejects_invalid_calls() {
 
     let prompts = session.request("prompts/list", json!({}));
     assert!(prompts.to_string().contains("estudiar_curso"));
+    for name in ["preparar_examen", "plan_de_estudio", "resumir_tema"] {
+        assert!(prompts.to_string().contains(name), "{name}");
+    }
+    let guided = session.request(
+        "prompts/get",
+        json!({"name": "resumir_tema", "arguments": {"course_id": "7", "tema": "Tema 3"}}),
+    );
+    assert!(
+        guided["result"]["messages"][0]["content"]["text"]
+            .as_str()
+            .unwrap()
+            .contains("Tema: Tema 3.")
+    );
     let prompt = session.request(
         "prompts/get",
         json!({"name": "estudiar_curso",
