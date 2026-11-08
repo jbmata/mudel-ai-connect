@@ -713,7 +713,7 @@ impl MoodleServer {
     }
 
     #[tool(
-        description = "Muestra como imágenes las figuras de un material: páginas de un PDF (circuitos, gráficas, esquemas), imágenes incrustadas en diapositivas PPTX, DOCX o XLSX, o una imagen suelta. Usa los IDs de get_course_context y pide hasta 4 páginas o diapositivas con `pages`. Úsala cuando read_course_file no baste porque el contenido está en un dibujo.",
+        description = "Muestra como imágenes las figuras de un material: páginas de un PDF (circuitos, gráficas, esquemas), imágenes incrustadas en diapositivas PPTX, DOCX o XLSX, o una imagen suelta. Usa los IDs de get_course_context y pide hasta 4 páginas o diapositivas con `pages`. Úsala cuando read_course_file no baste porque el contenido está en un dibujo. Si el usuario quiere ver la figura y tu cliente no muestra imágenes, usa save_course_figures.",
         annotations(
             read_only_hint = true,
             destructive_hint = false,
