@@ -290,7 +290,6 @@ impl Setup {
                 ui.set_max_width(380.0);
                 ui.label("En Moodle: tu foto o nombre → Preferencias → Cuenta de usuario → Claves de seguridad. Copia el token de Servicios web, no el de RSS.");
                 ui.add_space(4.0);
-                ui.label("Si no aparece, pídelo al soporte del centro.");
                 ui.label(theme::muted(
                     "Nunca introduzcas tu contraseña de Moodle aquí ni el token en un chat.",
                 ));
