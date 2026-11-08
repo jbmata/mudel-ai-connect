@@ -247,6 +247,7 @@ fn real_process_discovers_tools_and_rejects_invalid_calls() {
             "moodle_status",
             "read_course_file",
             "read_course_files",
+            "save_course_figures",
             "search_course",
             "view_course_file",
         ]
@@ -255,7 +256,7 @@ fn real_process_discovers_tools_and_rejects_invalid_calls() {
         let name = tool["name"].as_str().unwrap();
         assert_eq!(
             tool["annotations"]["readOnlyHint"],
-            name != "download_course_file",
+            !["download_course_file", "save_course_figures"].contains(&name),
             "{name}"
         );
         assert_eq!(tool["annotations"]["destructiveHint"], false, "{name}");

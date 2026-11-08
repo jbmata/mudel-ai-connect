@@ -24,6 +24,8 @@ Pensada para un grupo reducido de pruebas que pueda informar de fallos.
   PPTX, DOCX y XLSX o una imagen suelta (PNG, JPG, GIF, WEBP). Los dibujos hechos con formas de
   PowerPoint, los gráficos de Office y los formatos EMF, WMF y SVG no se pueden mostrar, y avisa
   de ello.
+- `save_course_figures`: guarda esas mismas figuras en `Descargas/Mudel AI Connect/<asignatura>` y
+  devuelve la ruta, para que el usuario las abra aunque su cliente no muestre las imágenes del chat.
 - `download_course_file`: guarda un archivo del curso, en cualquier formato, en
   `Descargas/Mudel AI Connect/<asignatura>` (o en la carpeta que elijas en **Permisos**). No
   sobrescribe nada, reutiliza el archivo si ya está igual y lo marca como descargado de

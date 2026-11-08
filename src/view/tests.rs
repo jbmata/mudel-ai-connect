@@ -294,3 +294,77 @@ async fn unsupported_files_and_bad_requests_never_download() {
         assert!(view(&client, request(pages)).await.is_err());
     }
 }
+
+#[tokio::test]
+async fn saved_figures_go_to_the_course_folder_without_overwriting_and_a_bad_folder_is_refused() {
+    use crate::moodle::tests::{mock_with, response};
+    let folder = tempfile::tempdir().unwrap();
+    let settings = folder.path().join("downloads.json");
+    let default = folder.path().join("Descargas");
+    std::fs::create_dir_all(&default).unwrap();
+    let views = Views {
+        info: json!({"filename": "Prueba 02.pdf", "source_url": "https://campus.example/f.pdf"}),
+        images: vec![
+            Shown {
+                label: "Página 1".into(),
+                mime: "image/png",
+                data: png(40, 40, |_, _| [1, 2, 3]),
+            },
+            Shown {
+                label: "Diapositiva 3, imagen 1".into(),
+                mime: "image/jpeg",
+                data: vec![0xFF, 0xD8, 0xFF],
+            },
+        ],
+    };
+    for round in 0..2 {
+        let (client, _requests, handle) = mock_with(|_| {
+            vec![
+                response(200, r#"{"userid": 5}"#).into_bytes(),
+                response(200, r#"[{"id": 7, "fullname": "Sistemas / Electrónicos"}]"#).into_bytes(),
+            ]
+        });
+        let saved = save(&client, 7, &settings, &default, &views).await.unwrap();
+        handle.join().unwrap();
+        let paths: Vec<&str> = saved["paths"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|path| path.as_str().unwrap())
+            .collect();
+        assert_eq!(paths.len(), 2);
+        // El mismo contenido guardado dos veces reutiliza el archivo, no crea copias.
+        assert!(
+            paths[0].ends_with("Prueba 02 - Página 1.png"),
+            "{paths:?} {round}"
+        );
+        assert!(
+            paths[1].ends_with("Prueba 02 - Diapositiva 3, imagen 1.jpg"),
+            "{paths:?}"
+        );
+        assert!(std::fs::read(paths[0]).unwrap().starts_with(b"\x89PNG"));
+        assert!(paths[0].contains("Sistemas _ Electrónicos"));
+        assert!(std::path::Path::new(paths[0]).starts_with(&default));
+    }
+    // Solo hay los dos archivos de la carpeta de la asignatura (más nada suelto).
+    let course = std::fs::read_dir(&default)
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    assert_eq!(std::fs::read_dir(course).unwrap().count(), 2);
+    // Un curso que no es de la cuenta no guarda nada.
+    let (client, _requests, handle) = mock_with(|_| {
+        vec![
+            response(200, r#"{"userid": 5}"#).into_bytes(),
+            response(200, "[]").into_bytes(),
+        ]
+    });
+    assert!(
+        save(&client, 99, &settings, &default, &views)
+            .await
+            .is_err()
+    );
+    handle.join().unwrap();
+}

@@ -18,7 +18,7 @@ const MAX_DOWNLOAD_BYTES: usize = 200 * 1024 * 1024;
 const READ_CHARS: usize = 12000;
 const BATCH_CHARS: usize = 6000;
 pub const MAX_BATCH: usize = 6;
-const SAVE_ERROR: &str = "No se pudo guardar el archivo en la carpeta de descargas.";
+pub(crate) const SAVE_ERROR: &str = "No se pudo guardar el archivo en la carpeta de descargas.";
 const DOWNLOAD_ERROR: &str = "Moodle devolvió un error al descargar. Comprueba el permiso de descarga de archivos del servicio.";
 
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -342,7 +342,7 @@ pub fn default_download_folder() -> Result<PathBuf, String> {
     Ok(home()?.join("Downloads/Mudel AI Connect"))
 }
 
-fn download_root(settings: &Path, default: &Path) -> (PathBuf, Option<String>) {
+pub(crate) fn download_root(settings: &Path, default: &Path) -> (PathBuf, Option<String>) {
     let invalid = || {
         (default.to_owned(), Some("No se pudo leer la carpeta elegida; se ha guardado en Descargas. Vuelve a elegirla en Permisos.".into()))
     };
@@ -394,7 +394,10 @@ fn same_contents(temporary: &NamedTempFile, existing: &Path) -> std::io::Result<
     Ok(true)
 }
 
-fn place(mut temporary: NamedTempFile, wanted: &Path) -> Result<(PathBuf, bool), String> {
+pub(crate) fn place(
+    mut temporary: NamedTempFile,
+    wanted: &Path,
+) -> Result<(PathBuf, bool), String> {
     let stem = wanted
         .file_stem()
         .and_then(|value| value.to_str())
@@ -426,7 +429,7 @@ fn place(mut temporary: NamedTempFile, wanted: &Path) -> Result<(PathBuf, bool),
     Err("Hay demasiadas copias con ese nombre en la carpeta de descargas.".into())
 }
 
-fn mark_from_internet(path: &Path, source: &str) -> Option<String> {
+pub(crate) fn mark_from_internet(path: &Path, source: &str) -> Option<String> {
     #[cfg(windows)]
     let success = {
         let mut alternate_stream = path.as_os_str().to_os_string();
@@ -471,15 +474,8 @@ fn mark_from_internet(path: &Path, source: &str) -> Option<String> {
     }
 }
 
-pub async fn download(
-    client: &MoodleClient,
-    params: CourseFile,
-    settings: &Path,
-    default: &Path,
-) -> Result<Value, String> {
-    if params.course_id <= 0 || params.module_id <= 0 {
-        return Err("course_id y module_id deben ser positivos.".into());
-    }
+/// Nombre completo de una asignatura de la cuenta conectada.
+pub(crate) async fn course_name(client: &MoodleClient, course_id: i64) -> Result<String, String> {
     let info = client.call(crate::moodle::FUNCTIONS[0], &[]).await?;
     let courses = client
         .call(
@@ -489,8 +485,35 @@ pub async fn download(
         .await?;
     let course = crate::moodle::array(&courses)?
         .iter()
-        .find(|course| course["id"].as_i64() == Some(params.course_id))
+        .find(|course| course["id"].as_i64() == Some(course_id))
         .ok_or("Ese curso no está entre las asignaturas de la cuenta conectada.")?;
+    Ok(text(course["fullname"].as_str().unwrap_or("")))
+}
+
+/// Carpeta de una asignatura dentro de la de descargas: se crea y no puede salirse de ella.
+pub(crate) fn course_folder(root: &Path, name: &str, course_id: i64) -> Result<PathBuf, String> {
+    let folder = root.join(safe_filename(name, &format!("curso {course_id}")));
+    fs::create_dir_all(&folder).map_err(|_| "No se pudo escribir en la carpeta de descargas.")?;
+    if !folder
+        .canonicalize()
+        .map_err(|_| SAVE_ERROR)?
+        .starts_with(root.canonicalize().map_err(|_| SAVE_ERROR)?)
+    {
+        return Err("La carpeta de la asignatura sale de la carpeta de descargas elegida.".into());
+    }
+    Ok(folder)
+}
+
+pub async fn download(
+    client: &MoodleClient,
+    params: CourseFile,
+    settings: &Path,
+    default: &Path,
+) -> Result<Value, String> {
+    if params.course_id <= 0 || params.module_id <= 0 {
+        return Err("course_id y module_id deben ser positivos.".into());
+    }
+    let course_name = course_name(client, params.course_id).await?;
     let (module, item) = client
         .course_file(params.course_id, params.module_id, params.file_index)
         .await?;
@@ -508,18 +531,7 @@ pub async fn download(
         );
     }
     let (root, fallback) = download_root(settings, default);
-    let folder = root.join(safe_filename(
-        &text(course["fullname"].as_str().unwrap_or("")),
-        &format!("curso {}", params.course_id),
-    ));
-    fs::create_dir_all(&folder).map_err(|_| "No se pudo escribir en la carpeta de descargas.")?;
-    if !folder
-        .canonicalize()
-        .map_err(|_| SAVE_ERROR)?
-        .starts_with(root.canonicalize().map_err(|_| SAVE_ERROR)?)
-    {
-        return Err("La carpeta de la asignatura sale de la carpeta de descargas elegida.".into());
-    }
+    let folder = course_folder(&root, &course_name, params.course_id)?;
     let mut temporary = tempfile::Builder::new()
         .prefix(".mudel-")
         .suffix(".part")

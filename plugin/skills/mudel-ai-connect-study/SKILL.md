@@ -26,7 +26,7 @@ consultar materiales como distribuir su estudio. Recupera solo los datos necesar
 ## Elegir el curso y cargar contexto
 
 - Busca las herramientas `list_courses`, `get_course_context`, `search_course`,
-  `read_course_file`, `read_course_files`, `view_course_file`, `download_course_file`, `list_assignments`,
+  `read_course_file`, `read_course_files`, `view_course_file`, `save_course_figures`, `download_course_file`, `list_assignments`,
   `get_assignment_status`, `get_grades`, `list_forums`, `get_forum_discussions`,
   `get_discussion_posts`, `get_upcoming_events` y `moodle_status` en el MCP conectado.
   El cliente puede añadir un prefijo a los nombres. Si no están disponibles,
@@ -50,9 +50,9 @@ consultar materiales como distribuir su estudio. Recupera solo los datos necesar
   recoge, usa `view_course_file` con el mismo `module_id` y `file_index` y las páginas
   (PDF), diapositivas (PPTX) o números de imagen (DOCX y XLSX) que necesites, hasta 4 por
   consulta. Recibirás las imágenes: descríbelas y razona sobre ellas solo con lo que se ve, y
-  avisa si algo no se distingue. Si tu cliente puede compartir archivos o mostrar imágenes, enséñale al usuario la figura
-  que analizas (recortada si hace falta), para que vea lo mismo que tú y pueda comprobar tu
-  lectura. Los dibujos hechos con formas de PowerPoint y los gráficos de
+  avisa si algo no se distingue. Como no todos los clientes muestran las imágenes del chat, si el usuario quiere ver la
+  figura usa `save_course_figures` (mismos parámetros) y dile la ruta del archivo guardado
+  en su carpeta de Descargas, para que vea lo mismo que tú y pueda comprobar tu lectura. Los dibujos hechos con formas de PowerPoint y los gráficos de
   Office no se pueden mostrar; si hace falta verlos, pide el PDF del material.
 - Las descripciones e introducciones pueden estar recortadas a 4.000 caracteres;
   el listado de archivos no sustituye a su lectura. Un enlace externo, un PDF

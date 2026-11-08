@@ -5,7 +5,12 @@
 //! Las páginas de PDF se dibujan con `hayro` (Rust puro, sin ejecutar nada del documento).
 //! Las imágenes incrustadas se reducen y se recodifican, con límites de tamaño.
 
-use std::{io::Cursor, sync::Arc, time::Duration};
+use std::{
+    io::{Cursor, Write},
+    path::Path,
+    sync::Arc,
+    time::Duration,
+};
 
 use hayro::{
     PixmapSettings, RenderCache, RenderSettings,
@@ -23,7 +28,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::{
-    files::fetch,
+    files::{self, fetch},
     moodle::{FORMAT_ERROR, MoodleClient},
     office::{self, Kind},
 };
@@ -143,6 +148,55 @@ pub async fn view(client: &MoodleClient, params: ViewFile) -> Result<Views, Stri
         info: client.clean(info),
         images: rendered.images,
     })
+}
+
+/// Guarda las imágenes en la carpeta de descargas (como `download_course_file`) y devuelve sus
+/// rutas, para que el usuario las abra aunque su cliente no muestre las imágenes del chat.
+pub async fn save(
+    client: &MoodleClient,
+    course_id: i64,
+    settings: &Path,
+    default: &Path,
+    views: &Views,
+) -> Result<Value, String> {
+    let (root, fallback) = files::download_root(settings, default);
+    let name = files::course_name(client, course_id).await?;
+    let folder = files::course_folder(&root, &name, course_id)?;
+    let source = views.info["source_url"].as_str().unwrap_or("").to_owned();
+    let stem = Path::new(views.info["filename"].as_str().unwrap_or("figura"))
+        .file_stem()
+        .map_or_else(
+            || "figura".to_owned(),
+            |stem| stem.to_string_lossy().into_owned(),
+        );
+    let mut paths = Vec::new();
+    for image in &views.images {
+        let extension = if image.mime == "image/png" {
+            "png"
+        } else {
+            "jpg"
+        };
+        let wanted = folder.join(files::safe_filename(
+            &format!("{stem} - {}.{extension}", image.label),
+            "figura",
+        ));
+        let mut temporary = tempfile::Builder::new()
+            .prefix(".mudel-")
+            .suffix(".part")
+            .tempfile_in(&folder)
+            .map_err(|_| files::SAVE_ERROR)?;
+        temporary
+            .write_all(&image.data)
+            .and_then(|()| temporary.flush())
+            .map_err(|_| files::SAVE_ERROR)?;
+        files::mark_from_internet(temporary.path(), &source);
+        let (path, created) = files::place(temporary, &wanted)?;
+        if !created {
+            files::mark_from_internet(&path, &source);
+        }
+        paths.push(path.to_string_lossy().into_owned());
+    }
+    Ok(json!({"paths": paths, "folder": folder.to_string_lossy(), "note": fallback}))
 }
 
 struct Rendered {

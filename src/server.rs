@@ -736,6 +736,40 @@ impl MoodleServer {
     }
 
     #[tool(
+        description = "Guarda en tu carpeta Descargas, como archivos PNG o JPG, las mismas figuras que muestra view_course_file (páginas de PDF, imágenes de diapositivas, DOCX o XLSX) y devuelve sus rutas. Úsala cuando el usuario quiera ver o abrir la figura él mismo, porque no todos los clientes muestran las imágenes del chat. Necesita el permiso de descargas.",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = true
+        )
+    )]
+    async fn save_course_figures(
+        &self,
+        Parameters(params): Parameters<ViewFile>,
+    ) -> CallToolResult {
+        let course_id = params.course_id;
+        let result = async {
+            let client = self.client(Some("materials"))?;
+            let downloads = self.client(Some("downloads"))?;
+            let settings = self
+                .permissions_path
+                .as_ref()
+                .map_err(Clone::clone)?
+                .with_file_name("downloads.json");
+            let default = self.download_folder.as_ref().map_err(Clone::clone)?;
+            let views = view::view(client, params).await?;
+            let saved = view::save(downloads, course_id, &settings, default, &views).await?;
+            Ok(json!({"filename": views.info["filename"], "module_url": views.info["module_url"],
+                "source_url": views.info["source_url"], "total": views.info["total"],
+                "unit": views.info["unit"], "notes": views.info["notes"], "saved": saved,
+                "note": "Guardado en este equipo; no se ha abierto ni enviado a ningún sitio. Dile al usuario dónde están."}))
+        }
+        .await;
+        self.result(result)
+    }
+
+    #[tool(
         description = "Estado de entrega de una tarea (usa el id de list_assignments): si está entregada, calificada, nota y comentarios del profesor.",
         annotations(
             read_only_hint = true,

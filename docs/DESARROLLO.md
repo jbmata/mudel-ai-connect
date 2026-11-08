@@ -219,6 +219,7 @@ añadieron categorías porque el archivo de permisos se valida con exactamente e
 | `read_course_file` con Office | Materiales | `src/office.rs` (DOCX, PPTX y XLSX, que son ZIP con XML) |
 | `read_course_files` | Materiales | Una sola consulta de contenidos para hasta 6 archivos |
 | `view_course_file` | Materiales | `src/view.rs`: dibuja páginas de PDF con `hayro` (Rust puro) y devuelve imágenes incrustadas de PPTX, DOCX y XLSX (`office::pictures`); reduce y recodifica a PNG o JPEG con límites de tamaño |
+| `save_course_figures` | Descargas | Lo mismo que `view_course_file` y guarda las imágenes con las funciones de `download_course_file` (carpeta elegida, sin sobrescribir, marca de archivo de internet) |
 | `search_course` | Materiales | Filtra `core_course_get_contents`; en todos los cursos consulta de 6 en 6 |
 | `get_assignment_status` | Tareas | `mod_assign_get_submission_status` |
 | `get_grades` | Tareas | `gradereport_user_get_grade_items` |
