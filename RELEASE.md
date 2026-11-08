@@ -20,9 +20,9 @@ que cada versión tiene que publicarse ahí.
 
 ## Generar los paquetes
 
-Los paquetes que se publican deben salir del workflow **Tests** (artefactos
-`mudel-native-*`), que compila en Windows con MSVC y en Mac con Apple Silicon desde el
-commit que vayas a etiquetar. Para generarlos a mano, en cada plataforma:
+Los paquetes que se publican los genera el workflow **Release**, que compila en Windows con
+MSVC y en Mac con Apple Silicon desde el commit de `main` que vayas a etiquetar (el workflow
+**Tests** también los genera como artefactos `mudel-native-*` para probarlos). Para generarlos a mano, en cada plataforma:
 
 ```powershell
 ./scripts/package.ps1
@@ -48,18 +48,26 @@ equipo de prueba, con cada plataforma que vayas a anunciar:
 
 ## Publicar en GitHub
 
-1. Revisa los cambios con `git diff`. Comprueba que `.env`, credenciales, copias de
-   configuración y temporales están excluidos.
-2. Sube el commit y espera a que termine el workflow **Tests**.
-3. Crea la release con la etiqueta `vX.Y.Z`. Mientras sea una beta, márcala como
-   **pre-release**: el aviso de versiones nuevas también las tiene en cuenta.
-4. Adjunta los archivos de cada plataforma y su `SHA256SUMS.txt`.
-5. En la descripción copia la entrada de `CHANGELOG.md` y explica cómo pasar el aviso de
-   SmartScreen («Más información → Ejecutar de todas formas») y cómo comprobar la huella:
+Se desarrolla en la rama **`dev`** y `main` solo recibe lo que ya está listo. Una release se
+publica sola cuando llega un commit a `main` (workflow **Release**,
+`.github/workflows/release.yml`):
 
-   ```powershell
-   Get-FileHash .\Mudel-AI-Connect-Setup.exe -Algorithm SHA256
-   ```
+1. Trabaja y sube commits a `dev`. El workflow **Tests** los comprueba (formato, Clippy,
+   pruebas y paquetes); `dev` nunca publica nada.
+2. Cuando quieras publicar: sube la versión (ver «Preparar la versión»), actualiza el
+   CHANGELOG y fusiona `dev` en `main` (con una pull request o `git merge`).
+3. El workflow **Release** lee la versión de `Cargo.toml`. Si `vX.Y.Z` aún no tiene release,
+   compila y verifica los paquetes de Windows y de Mac, crea la etiqueta y la release
+   (**pre-release** mientras la versión empiece por `0.`) con los instaladores, los ZIP del
+   plugin, un `SHA256SUMS-<plataforma>.txt` por plataforma y las notas tomadas de la primera
+   sección del CHANGELOG.
+4. Si fusionas en `main` sin subir la versión, no se publica nada nuevo.
+
+Para repetir una publicación que falló, borra la release y la etiqueta de esa versión y lanza
+**Release** a mano desde la pestaña Actions (*Run workflow*).
+
+Antes de fusionar, revisa los cambios con `git diff` y comprueba que `.env`, credenciales,
+copias de configuración y temporales están excluidos.
 
 El instalador incluye la licencia MIT del proyecto dentro del servidor instalado. Las
 dependencias conservan sus propias licencias. `dist/` queda fuera de Git.

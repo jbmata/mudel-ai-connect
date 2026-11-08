@@ -1,0 +1,132 @@
+name: Release
+
+# Al llegar commits a main (por ejemplo, al fusionar dev) se publica una release con los
+# instaladores de Windows y de Mac, siempre que la versión de Cargo.toml aún no tenga release.
+# Para publicar una versión nueva, sube la versión (ver RELEASE.md) antes de fusionar en main.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      publish: ${{ steps.read.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - id: read
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "v$version" >/dev/null 2>&1; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "La versión $version ya tiene release: no se publica otra." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  package:
+    needs: version
+    if: needs.version.outputs.publish == 'true'
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Preparar Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - name: Generar y comprobar instalador y plugin nativos
+        shell: pwsh
+        run: |
+          ./scripts/package.ps1
+          ./scripts/verify-package.ps1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.os }}
+          path: dist/native/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [version, package]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Reunir los archivos
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh run download "$GITHUB_RUN_ID" --dir artifacts
+          mkdir assets
+          for platform in artifacts/*/*/; do
+            name=$(basename "$platform")
+            for file in "$platform"*; do
+              case "$(basename "$file")" in
+                LICENSE|README.md) ;;
+                SHA256SUMS.txt) cp "$file" "assets/SHA256SUMS-$name.txt" ;;
+                *) cp "$file" assets/ ;;
+              esac
+            done
+          done
+          ls -l assets
+      - name: Preparar las notas
+        run: |
+          {
+            awk '/^## /{n++; next} n==1' CHANGELOG.md
+            cat <<'NOTES'
+
+          ### Instalar
+
+          - **Windows:** descarga `Mudel-AI-Connect-Setup.exe` y ábrelo. Si SmartScreen avisa,
+            pulsa «Más información → Ejecutar de todas formas» (el instalador aún no está firmado).
+          - **Mac (Apple Silicon):** descarga `Mudel-AI-Connect-Setup-macos-aarch64.zip`, descomprímelo
+            y abre la app con clic derecho → Abrir (aún no está notarizada).
+          - El ZIP `mudel-ai-connect-plugin-native-*` es el plugin para Codex y Claude Code.
+
+          Comprueba la huella con los archivos `SHA256SUMS-*.txt`:
+
+          ```powershell
+          Get-FileHash .\Mudel-AI-Connect-Setup.exe -Algorithm SHA256
+          ```
+          NOTES
+          } > notes.md
+      - name: Crear la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          flags=""
+          case "$VERSION" in 0.*) flags="--prerelease" ;; esac
+          gh release create "v$VERSION" assets/* \
+            --target "$GITHUB_SHA" \
+            --title "Mudel AI Connect $VERSION" \
+            --notes-file notes.md \
+            $flags

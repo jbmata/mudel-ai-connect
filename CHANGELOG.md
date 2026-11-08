@@ -1,6 +1,6 @@
 # Cambios
 
-## Sin publicar — primera versión
+## 0.2.0 — primera versión
 
 Pensada para un grupo reducido de pruebas que pueda informar de fallos.
 
