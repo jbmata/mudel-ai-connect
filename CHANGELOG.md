@@ -9,7 +9,7 @@ Pensada para un grupo reducido de pruebas que pueda informar de fallos.
 - Instalador con ventana para **Windows** (x64) y **macOS** (Apple Silicon). Conecta Claude
   Desktop, Claude Code y ChatGPT Work local / Codex con un servidor MCP local de solo lectura.
 - Plugin para Codex y Claude Code, con las skills de estudio y de configuración.
-- Botón **Conectar con tu universidad** (solo Windows): abre la página oficial de acceso del
+- Botón **Conectar con tu universidad**: abre la página oficial de acceso del
   campus, inicias sesión allí (SSO y doble factor incluidos) y Mudel recibe el token y lo
   guarda, sin ver nunca tu contraseña. Pendiente de probar con un inicio de sesión real.
 - El token se guarda en el Llavero de macOS o cifrado con DPAPI en Windows, con cuentas

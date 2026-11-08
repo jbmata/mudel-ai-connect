@@ -105,7 +105,7 @@ Ejemplos de uso:
 
 ## Clave de Moodle
 
-**En Windows, lo más cómodo es el botón «Conectar con tu universidad»**: se abre la página oficial
+**Lo más cómodo es el botón «Conectar con tu universidad»**: se abre la página oficial
 de acceso de tu campus, inicias sesión allí (con el doble factor si lo pide) y Mudel recibe el
 token y lo guarda en el almacén seguro. Mudel nunca ve tu contraseña ni tu segundo factor. Usa
 el mismo mecanismo que la app oficial de Moodle, así que el campus debe tener activado el servicio

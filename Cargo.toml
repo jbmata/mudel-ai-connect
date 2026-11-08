@@ -51,5 +51,6 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_Shel
 security-framework = "3.7"
 
 [profile.release]
-lto = "thin"
+lto = "fat"
+codegen-units = 1
 strip = true

@@ -17,7 +17,7 @@ use crate::{
 
 pub const NAME: &str = "mudel-ai-connect";
 const OLD_NAME: &str = "moodle-ai-connect";
-pub const SERVER: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/server.bin"));
+pub static SERVER: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/server.bin"));
 pub const EXE: &str = if cfg!(windows) {
     "mudel-ai-connect-server.exe"
 } else {

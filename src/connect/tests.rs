@@ -6,6 +6,24 @@ fn answer(base: &str, passport: &str, token: &str) -> String {
     format!("{SCHEME}://token={payload}")
 }
 
+fn request(port: u16, line: &str) -> String {
+    let mut stream = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).unwrap();
+    write!(stream, "{line}\r\nHost: 127.0.0.1\r\n\r\n").unwrap();
+    let mut reply = String::new();
+    stream.read_to_string(&mut reply).unwrap();
+    reply
+}
+
+fn wait_for_answer(receiver: &Receiver) -> Option<String> {
+    for _ in 0..50 {
+        if let Some(answer) = receiver.try_answer() {
+            return Some(answer);
+        }
+        std::thread::sleep(Duration::from_millis(40));
+    }
+    None
+}
+
 #[test]
 fn the_campus_address_is_normalised_and_must_be_https() {
     assert_eq!(
@@ -35,11 +53,11 @@ fn the_launch_url_carries_a_fresh_random_passport_each_time() {
     assert_eq!(first.passport.len(), 32);
     assert!(first.passport.bytes().all(|byte| byte.is_ascii_hexdigit()));
     assert_ne!(first.passport, second.passport);
-    let url = first.launch_url();
+    let url = first.launch_url("http://127.0.0.1:4242/mudel-login?");
     assert!(url.starts_with("https://campus.example/admin/tool/mobile/launch.php?"));
     assert!(url.contains("service=moodle_mobile_app"));
     assert!(url.contains(&format!("passport={}", first.passport)));
-    assert!(url.ends_with("&urlscheme=mudelai"));
+    assert!(url.ends_with("&urlscheme=http%3A%2F%2F127%2E0%2E0%2E1%3A4242%2Fmudel%2Dlogin%3F"));
 }
 
 #[test]
@@ -47,7 +65,6 @@ fn a_genuine_answer_gives_the_token_however_the_browser_wrote_it() {
     let attempt = Attempt::new("https://campus.example").unwrap();
     let genuine = answer(attempt.base_url(), &attempt.passport, "abc123XYZ");
     assert_eq!(attempt.accept(&genuine).unwrap(), "abc123XYZ");
-    assert_eq!(attempt.accept(&format!("{genuine}/")).unwrap(), "abc123XYZ");
     assert_eq!(
         attempt.accept(&format!("  {genuine}\n")).unwrap(),
         "abc123XYZ"
@@ -96,51 +113,58 @@ fn answers_from_another_attempt_campus_or_source_are_refused() {
 }
 
 #[test]
-fn the_second_instance_hands_the_answer_over_through_a_file() {
-    let directory = tempfile::tempdir().unwrap();
-    assert!(take_callback(directory.path()).is_none());
-    hand_over(directory.path(), "mudelai://token=ABC=").unwrap();
+fn the_browser_request_is_turned_into_the_answer_only_when_it_is_the_redirect() {
     assert_eq!(
-        take_callback(directory.path()).as_deref(),
-        Some("mudelai://token=ABC=")
+        answer_in("GET /mudel-login?://token=QUJD%3D HTTP/1.1").as_deref(),
+        Some("mudelai://token=QUJD%3D")
     );
-    assert!(take_callback(directory.path()).is_none());
-    // La última respuesta sustituye a la anterior.
-    hand_over(directory.path(), "mudelai://token=UNO").unwrap();
-    hand_over(directory.path(), "mudelai://token=DOS").unwrap();
-    assert_eq!(
-        take_callback(directory.path()).as_deref(),
-        Some("mudelai://token=DOS")
-    );
-    // Solo se entregan direcciones propias y de tamaño razonable.
-    for bad in [
-        "https://campus.example".to_string(),
-        "otro://token=1".to_string(),
-        format!("mudelai://token={}", "a".repeat(5000)),
+    for other in [
+        "",
+        "GET / HTTP/1.1",
+        "GET /favicon.ico HTTP/1.1",
+        "GET /mudel-login HTTP/1.1",
+        "GET /mudel-login?://token= HTTP/1.1",
+        "GET /mudel-login?token=abc HTTP/1.1",
+        "POST /mudel-login?://token=abc HTTP/1.1",
     ] {
-        assert!(hand_over(directory.path(), &bad).is_err());
+        assert!(answer_in(other).is_none(), "{other}");
     }
-    assert!(take_callback(directory.path()).is_none());
 }
 
-#[cfg(windows)]
 #[test]
-fn the_scheme_is_registered_for_the_current_user_and_removed_afterwards() {
-    let scheme = format!("mudelaitest{}", std::process::id());
-    let exe = std::env::current_exe().unwrap();
-    let query = |path: &str| {
-        std::process::Command::new("reg")
-            .args(["query", &format!(r"HKCU\Software\Classes\{scheme}{path}")])
-            .output()
-            .unwrap()
-    };
-    register(&scheme, &exe).unwrap();
-    let command = String::from_utf8_lossy(&query(r"\shell\open\command").stdout).to_string();
-    assert!(command.contains("%1"), "{command}");
-    assert!(command.contains(exe.to_str().unwrap()), "{command}");
-    assert!(String::from_utf8_lossy(&query("").stdout).contains("URL Protocol"));
-    unregister(&scheme);
-    assert!(!query("").status.success());
-    // Quitar algo que no existe no es un error.
-    unregister(&scheme);
+fn the_local_receiver_hands_over_the_answer_and_ignores_everything_else() {
+    let receiver = Receiver::start().unwrap();
+    let redirect = receiver.redirect();
+    assert!(redirect.starts_with("http://127.0.0.1:"));
+    assert!(redirect.ends_with("/mudel-login?"));
+    let port = receiver.port;
+
+    // Una petición cualquiera (por ejemplo el icono de la pestaña) no cuenta.
+    let reply = request(port, "GET /favicon.ico HTTP/1.1");
+    assert!(reply.starts_with("HTTP/1.1 404"), "{reply}");
+    assert!(wait_for_answer(&receiver).is_none());
+
+    // La redirección de Moodle sí, y el navegador recibe una página sin el token.
+    let attempt = Attempt::new("https://campus.example").unwrap();
+    let genuine = answer(attempt.base_url(), &attempt.passport, "abc123XYZ");
+    let payload = genuine.split_once("token=").unwrap().1;
+    let reply = request(
+        port,
+        &format!("GET /mudel-login?://token={payload} HTTP/1.1"),
+    );
+    assert!(reply.starts_with("HTTP/1.1 200"), "{reply}");
+    assert!(reply.contains("Ya puedes cerrar esta pestaña"));
+    assert!(reply.contains("history.replaceState"));
+    assert!(!reply.contains(payload));
+    let received = wait_for_answer(&receiver).expect("la respuesta debía llegar");
+    assert_eq!(attempt.accept(&received).unwrap(), "abc123XYZ");
+}
+
+#[test]
+fn a_receiver_stops_listening_when_dropped() {
+    let receiver = Receiver::start().unwrap();
+    let port = receiver.port;
+    drop(receiver);
+    std::thread::sleep(Duration::from_millis(400));
+    assert!(TcpStream::connect((Ipv4Addr::LOCALHOST, port)).is_err());
 }

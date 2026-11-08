@@ -8,7 +8,7 @@ use std::{
 
 use eframe::egui;
 use mudel_ai_connect_server::{
-    connect::{self, Attempt},
+    connect::{Attempt, Receiver as LoginReceiver},
     credentials::{self, Kind},
     files,
     installer::{self, Client, Paths},
@@ -25,6 +25,7 @@ const LOGIN_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 /// Inicio de sesión en curso: espera la respuesta del navegador.
 struct Login {
     attempt: Attempt,
+    receiver: LoginReceiver,
     started: Instant,
 }
 
@@ -184,16 +185,17 @@ impl Setup {
             Ok(attempt) => attempt,
             Err(error) => return self.fail(error),
         };
-        let registered = std::env::current_exe()
-            .map_err(|_| "No se encontró este programa para recibir la respuesta.".to_string())
-            .and_then(|exe| connect::register(connect::SCHEME, &exe));
-        if let Err(error) = registered {
-            return self.fail(error);
-        }
-        ctx.open_url(egui::OpenUrl::new_tab(attempt.launch_url()));
+        let receiver = match LoginReceiver::start() {
+            Ok(receiver) => receiver,
+            Err(error) => return self.fail(error),
+        };
+        ctx.open_url(egui::OpenUrl::new_tab(
+            attempt.launch_url(&receiver.redirect()),
+        ));
         self.url = attempt.base_url().to_string();
         self.login = Some(Login {
             attempt,
+            receiver,
             started: Instant::now(),
         });
         self.error = false;
@@ -201,9 +203,7 @@ impl Setup {
     }
 
     fn cancel_login(&mut self) {
-        if self.login.take().is_some() {
-            connect::unregister(connect::SCHEME);
-        }
+        self.login = None;
     }
 
     fn poll_login(&mut self, ctx: &egui::Context) {
@@ -211,26 +211,22 @@ impl Setup {
             return;
         };
         if login.started.elapsed() > LOGIN_TIMEOUT {
-            connect::unregister(connect::SCHEME);
             return self
                 .fail("Se agotó el tiempo para iniciar sesión. Vuelve a intentarlo.".into());
         }
-        match connect::take_callback(&self.paths.data) {
+        match login.receiver.try_answer() {
             None => {
                 self.login = Some(login);
                 ctx.request_repaint_after(Duration::from_millis(400));
             }
-            Some(callback) => {
-                connect::unregister(connect::SCHEME);
-                match login.attempt.accept(&callback) {
-                    Ok(token) => {
-                        self.token = token;
-                        self.url = login.attempt.base_url().to_string();
-                        self.install(ctx);
-                    }
-                    Err(error) => self.fail(error),
+            Some(callback) => match login.attempt.accept(&callback) {
+                Ok(token) => {
+                    self.token = token;
+                    self.url = login.attempt.base_url().to_string();
+                    self.install(ctx);
                 }
-            }
+                Err(error) => self.fail(error),
+            },
         }
     }
 
@@ -364,37 +360,29 @@ impl Setup {
                     .margin(egui::Margin::symmetric(8, 6)),
             )
             .labelled_by(label.id);
-            if connect::SUPPORTED {
-                ui.add_space(6.0);
-                if self.login.is_none() {
-                    if theme::secondary(ui, "Conectar con tu universidad").clicked() {
-                        self.start_login(ctx);
-                    }
-                    ui.label(theme::muted(
-                        "Inicias sesión en tu campus; Mudel no ve tu contraseña.",
-                    ));
-                } else {
-                    ui.horizontal(|ui| {
-                        ui.spinner();
-                        ui.label("Esperando el inicio de sesión en el navegador…");
-                        if theme::link(ui, "Cancelar").clicked() {
-                            self.cancel_login();
-                            self.message.clear();
-                        }
-                    });
+            ui.add_space(6.0);
+            if self.login.is_none() {
+                if theme::secondary(ui, "Conectar con tu universidad").clicked() {
+                    self.start_login(ctx);
                 }
+                ui.label(theme::muted(
+                    "Inicias sesión en tu campus; Mudel no ve tu contraseña.",
+                ));
+            } else {
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.label("Esperando el inicio de sesión en el navegador…");
+                    if theme::link(ui, "Cancelar").clicked() {
+                        self.cancel_login();
+                        self.message.clear();
+                    }
+                });
             }
             ui.add_space(4.0);
             let label = ui
                 .horizontal(|ui| {
-                    let label = theme::field_label(
-                        ui,
-                        if connect::SUPPORTED {
-                            "O introduce el token a mano (se guarda cifrado)"
-                        } else {
-                            "Token de servicios web (se guarda cifrado)"
-                        },
-                    );
+                    let label =
+                        theme::field_label(ui, "O introduce el token a mano (se guarda cifrado)");
                     theme::right(ui, |ui| {
                         if theme::link(ui, "¿Cómo lo consigo?").clicked() {
                             self.token_help = true;
@@ -609,12 +597,6 @@ impl Setup {
     }
 }
 
-impl Drop for Setup {
-    fn drop(&mut self) {
-        self.cancel_login();
-    }
-}
-
 impl eframe::App for Setup {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.show(ctx);
@@ -649,22 +631,6 @@ fn main() -> eframe::Result {
                 std::process::exit(1);
             }
         }
-    }
-    // El navegador lanza otra copia con la respuesta del campus: se la entrega a la ventana
-    // que espera y termina.
-    if let [_, callback] = std::env::args().collect::<Vec<_>>().as_slice()
-        && callback.to_ascii_lowercase().starts_with("mudelai://")
-    {
-        let delivered = connect::callback_directory()
-            .and_then(|directory| connect::hand_over(&directory, callback));
-        if let Err(error) = delivered {
-            rfd::MessageDialog::new()
-                .set_title("Mudel AI Connect")
-                .set_description(&error)
-                .set_level(rfd::MessageLevel::Error)
-                .show();
-        }
-        return Ok(());
     }
     if std::env::args().len() != 1 {
         eprintln!("Uso: mudel-ai-connect-setup [--package-check]");

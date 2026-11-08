@@ -109,13 +109,15 @@ todo el tema 3»).
 ## Conectar con tu universidad
 
 Botón en la ventana para obtener el token iniciando sesión en la página oficial del campus, sin
-escribir la clave a mano. Estado: **implementado en Windows; falta probarlo con un inicio de sesión
+escribir la clave a mano. Estado: **implementado; falta probarlo con un inicio de sesión
 real** (ver el detalle en `docs/DESARROLLO.md`).
 
 - Comprobado en tu campus: `launch.php` existe y redirige al login sin dar nada; ofrece acceso con
   Office 365, Google y EduGain.
-- Pendiente: probarlo pulsando el botón, soporte para macOS y comprobar qué hace el campus si no
-  acepta el esquema `mudelai://`.
+- Primer intento: la redirección a un esquema propio (`mudelai://`) no abrió nada en Chrome, así que
+  ahora la redirección va a un receptor local en `127.0.0.1`.
+- Pendiente: probarlo pulsando el botón (también en Mac) y comprobar que el campus acepta una
+  dirección `http://127.0.0.1` en `urlscheme`.
 
 ## No elegidas por ahora
 
