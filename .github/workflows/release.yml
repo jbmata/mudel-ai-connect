@@ -84,18 +84,18 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           gh run download "$GITHUB_RUN_ID" --dir artifacts
-          mkdir assets
+          mkdir release-files
           for platform in artifacts/*/*/; do
             name=$(basename "$platform")
             for file in "$platform"*; do
               case "$(basename "$file")" in
                 LICENSE|README.md) ;;
-                SHA256SUMS.txt) cp "$file" "assets/SHA256SUMS-$name.txt" ;;
-                *) cp "$file" assets/ ;;
+                SHA256SUMS.txt) cp "$file" "release-files/SHA256SUMS-$name.txt" ;;
+                *) cp "$file" release-files/ ;;
               esac
             done
           done
-          ls -l assets
+          ls -l release-files
       - name: Preparar las notas
         run: |
           {
@@ -125,7 +125,7 @@ jobs:
         run: |
           flags=""
           case "$VERSION" in 0.*) flags="--prerelease" ;; esac
-          gh release create "v$VERSION" assets/* \
+          gh release create "v$VERSION" release-files/* \
             --target "$GITHUB_SHA" \
             --title "Mudel AI Connect $VERSION" \
             --notes-file notes.md \
