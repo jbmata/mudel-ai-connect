@@ -72,6 +72,56 @@ pub fn pdf(body: &[u8]) -> Option<Value> {
     std::panic::catch_unwind(|| analyse(body)).ok().flatten()
 }
 
+/// Cuenta las imágenes y los trazos de dibujo de una página sin dibujarla.
+fn count<'a>(
+    page: &'a hayro::hayro_syntax::page::Page<'a>,
+    cache: &InterpreterCache<'a>,
+) -> Counter {
+    let (width, height) = page.render_dimensions();
+    let target = Rect::new(0.0, 0.0, f64::from(width), f64::from(height));
+    let mut state = Context::new(
+        page.initial_transform(true).to_kurbo(),
+        target,
+        cache,
+        page.xref(),
+        InterpreterSettings::default(),
+    );
+    let mut counter = Counter::default();
+    interpret_page(page, &mut state, &mut counter);
+    counter
+}
+
+impl Counter {
+    fn is_figure(&self) -> bool {
+        self.images > 0 || self.marks >= DRAWING_MARKS
+    }
+}
+
+/// De las páginas pedidas (desde 1), las que tienen figuras. Nunca falla.
+pub fn flagged(body: &[u8], wanted: &[usize]) -> Vec<usize> {
+    std::panic::catch_unwind(|| {
+        let Ok(pdf) = Pdf::new(Arc::new(body.to_vec())) else {
+            return Vec::new();
+        };
+        let pages = pdf.pages();
+        let cache = InterpreterCache::new();
+        let started = Instant::now();
+        let mut found = Vec::new();
+        for &number in wanted {
+            if started.elapsed().as_secs() >= BUDGET_SECONDS {
+                break;
+            }
+            if let Some(page) = number.checked_sub(1).and_then(|index| pages.get(index))
+                && count(page, &cache).is_figure()
+            {
+                found.push(number);
+            }
+        }
+        found
+    })
+    .unwrap_or_default()
+}
+
 fn analyse(body: &[u8]) -> Option<Value> {
     let pdf = Pdf::new(Arc::new(body.to_vec())).ok()?;
     let pages = pdf.pages();
@@ -83,19 +133,9 @@ fn analyse(body: &[u8]) -> Option<Value> {
         if started.elapsed().as_secs() >= BUDGET_SECONDS {
             break;
         }
-        let (width, height) = page.render_dimensions();
-        let target = Rect::new(0.0, 0.0, f64::from(width), f64::from(height));
-        let mut state = Context::new(
-            page.initial_transform(true).to_kurbo(),
-            target,
-            &cache,
-            page.xref(),
-            InterpreterSettings::default(),
-        );
-        let mut counter = Counter::default();
-        interpret_page(page, &mut state, &mut counter);
+        let counter = count(page, &cache);
         analysed += 1;
-        if counter.images > 0 || counter.marks >= DRAWING_MARKS {
+        if counter.is_figure() {
             found.push(json!({
                 "page": index + 1,
                 "images": counter.images,
@@ -110,7 +150,7 @@ fn analyse(body: &[u8]) -> Option<Value> {
     found.truncate(MAX_LISTED);
     let mut summary = json!({
         "pages": found,
-        "note": "Estas páginas tienen imágenes o dibujos que no salen en el texto. Para verlas usa view_course_file con esas páginas.",
+        "note": "Estas páginas tienen imágenes o dibujos que no salen en el texto. Se adjuntan como imágenes las del fragmento leído; para ver otras usa view_course_file.",
     });
     if total > MAX_LISTED {
         summary["more_pages_with_figures"] = json!(total - MAX_LISTED);
@@ -122,4 +162,4 @@ fn analyse(body: &[u8]) -> Option<Value> {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

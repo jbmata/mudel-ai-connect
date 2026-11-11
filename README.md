@@ -80,7 +80,7 @@ MCP-MOODLE/
 | `get_assignment_status` | Estado de entrega de una tarea: entregada, calificada, nota y comentarios del profesor. |
 | `get_grades` | Calificaciones de un curso, con su rango, porcentaje y comentario. |
 | `get_upcoming_events` | Consultar los próximos eventos del calendario. |
-| `read_course_file` | Extraer texto de PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), TXT, MD, CSV y HTML del curso, incluidas las páginas y los libros de Moodle.  Avisa de las páginas o diapositivas con figuras. |
+| `read_course_file` | Extraer texto de PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), TXT, MD, CSV y HTML del curso, incluidas las páginas y los libros de Moodle.  Adjunta como imágenes las figuras de las páginas o diapositivas leídas (hasta 3; `with_figures=false` lo evita). |
 | `read_course_files` | Leer a la vez hasta 6 archivos de un curso (primer fragmento de cada uno). |
 | `view_course_file` | Ver como imágenes las figuras de un material: páginas de un PDF (circuitos, gráficas, esquemas), imágenes de diapositivas PPTX, DOCX y XLSX, o una imagen suelta. Hasta 4 por consulta. |
 | `save_course_figures` | Guardar esas mismas figuras como PNG o JPG en tu carpeta Descargas y devolver su ruta, para verlas en cualquier cliente (necesita el permiso de descargas). |

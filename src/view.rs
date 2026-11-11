@@ -70,6 +70,7 @@ pub struct ViewFile {
 }
 
 /// Una imagen lista para enviar.
+#[derive(Debug)]
 pub struct Shown {
     pub label: String,
     pub mime: &'static str,
@@ -218,6 +219,40 @@ fn render_source(
         Source::Image => single_image(&body, extension),
     })
     .map_err(|_| String::from("No se pudo dibujar este archivo."))?
+}
+
+/// Figuras que `read_course_file` adjunta como máximo en cada lectura.
+pub const MAX_ATTACHED: usize = 3;
+
+/// Imágenes de las páginas con figuras (como mucho `MAX_ATTACHED`) entre las indicadas de un
+/// PDF. Es un añadido de la lectura, así que nunca falla: sin figuras o ante un error, no devuelve
+/// nada.
+pub fn attach_pdf_pages(body: Vec<u8>, pages: &[usize]) -> Vec<Shown> {
+    let mut with_figures = crate::figures::flagged(&body, pages);
+    with_figures.truncate(MAX_ATTACHED);
+    if with_figures.is_empty() {
+        return Vec::new();
+    }
+    std::panic::catch_unwind(|| pdf_pages(body, &with_figures))
+        .ok()
+        .and_then(Result::ok)
+        .map(|rendered| rendered.images)
+        .unwrap_or_default()
+}
+
+/// Imágenes incrustadas de las diapositivas indicadas de un PPTX (como mucho `MAX_ATTACHED`).
+pub fn attach_slides(body: &[u8], slides: &[usize]) -> Vec<Shown> {
+    let slides = &slides[..slides.len().min(MAX_ATTACHED)];
+    if slides.is_empty() {
+        return Vec::new();
+    }
+    let mut images = std::panic::catch_unwind(|| office_pictures(Kind::Pptx, body, slides))
+        .ok()
+        .and_then(Result::ok)
+        .map(|rendered| rendered.images)
+        .unwrap_or_default();
+    images.truncate(MAX_ATTACHED + 1);
+    images
 }
 
 /// Reúne imágenes sin pasar de los límites de tamaño de la respuesta.

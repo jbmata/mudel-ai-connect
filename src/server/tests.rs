@@ -66,6 +66,7 @@ async fn disabled_permissions_and_invalid_arguments_do_not_make_requests() {
             module_id: 90,
             file_index: 0,
             offset: 0,
+            with_figures: false,
         }))
         .await;
     assert!(read.is_error.unwrap_or(false));

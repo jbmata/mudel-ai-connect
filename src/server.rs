@@ -699,7 +699,7 @@ impl MoodleServer {
     }
 
     #[tool(
-        description = "Lee un PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), HTML o texto de un módulo del curso; también las páginas de Moodle. Usa los IDs e índices de get_course_context y pagina con next_offset. Las figuras no salen en el texto: para verlas usa view_course_file.",
+        description = "Lee un PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX), HTML o texto de un módulo del curso; también las páginas de Moodle. Usa los IDs e índices de get_course_context y pagina con next_offset. Las figuras no salen en el texto: las de las páginas o diapositivas leídas se adjuntan como imágenes (with_figures=false lo evita); para ver otras usa view_course_file.",
         annotations(
             read_only_hint = true,
             destructive_hint = false,
@@ -709,7 +709,18 @@ impl MoodleServer {
     )]
     async fn read_course_file(&self, Parameters(params): Parameters<ReadFile>) -> CallToolResult {
         let result = async { files::read(self.client(Some("materials"))?, params).await }.await;
-        self.result(result)
+        match result {
+            Ok(reading) => {
+                let mut result = self.result(Ok(reading.value));
+                result
+                    .content
+                    .extend(reading.images.into_iter().map(|image| {
+                        ContentBlock::image(BASE64_STANDARD.encode(&image.data), image.mime)
+                    }));
+                result
+            }
+            Err(error) => self.result(Err(error)),
+        }
     }
 
     #[tool(

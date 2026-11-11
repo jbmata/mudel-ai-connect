@@ -2,7 +2,7 @@ use super::*;
 
 /// PDF mínimo de una página con el contenido y los recursos indicados. `extra` son objetos
 /// adicionales (desde el 5) ya completos, por ejemplo una imagen.
-fn document(content: &str, resources: &str, extra: &[Vec<u8>]) -> Vec<u8> {
+pub(crate) fn document(content: &str, resources: &str, extra: &[Vec<u8>]) -> Vec<u8> {
     let mut objects: Vec<Vec<u8>> = vec![
         b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
         b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_vec(),

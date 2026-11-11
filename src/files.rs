@@ -12,6 +12,7 @@ use unicode_normalization::UnicodeNormalization;
 
 use crate::moodle::{FORMAT_ERROR, MAX_BYTES, MoodleClient, text};
 use crate::office;
+use crate::view::{self, Shown};
 
 const MAX_DOWNLOAD_BYTES: usize = 200 * 1024 * 1024;
 /// Caracteres que devuelve cada lectura, y cada archivo cuando se leen varios a la vez.
@@ -43,6 +44,14 @@ pub struct ReadFile {
     pub file_index: u64,
     #[serde(default)]
     pub offset: u64,
+    /// Adjunta como imágenes (hasta 3) las figuras de las páginas o diapositivas del fragmento
+    /// leído. Por defecto sí; ponlo a false para leer solo el texto.
+    #[serde(default = "attach_by_default")]
+    pub with_figures: bool,
+}
+
+fn attach_by_default() -> bool {
+    true
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -63,11 +72,19 @@ pub struct ReadFiles {
     pub files: Vec<BatchFile>,
 }
 
-pub async fn read(client: &MoodleClient, params: ReadFile) -> Result<Value, String> {
+pub async fn read(client: &MoodleClient, params: ReadFile) -> Result<Reading, String> {
     let (module, item) = client
         .course_file(params.course_id, params.module_id, params.file_index)
         .await?;
-    read_item(client, &module, &item, params.offset, READ_CHARS).await
+    read_item(
+        client,
+        &module,
+        &item,
+        params.offset,
+        READ_CHARS,
+        params.with_figures,
+    )
+    .await
 }
 
 /// Lee varios archivos de un mismo curso con una sola consulta de contenidos.
@@ -81,7 +98,9 @@ pub async fn read_many(client: &MoodleClient, params: ReadFiles) -> Result<Value
     for request in &params.files {
         let outcome =
             match MoodleClient::find_file(&sections, request.module_id, request.file_index) {
-                Ok((module, item)) => read_item(client, &module, &item, 0, BATCH_CHARS).await,
+                Ok((module, item)) => read_item(client, &module, &item, 0, BATCH_CHARS, false)
+                    .await
+                    .map(|reading| reading.value),
                 Err(error) => Err(error),
             };
         results.push(match outcome {
@@ -124,13 +143,21 @@ pub(crate) async fn fetch(
     Ok((body, content_type))
 }
 
+/// Lo que devuelve una lectura: el resultado en JSON y las figuras adjuntas.
+#[derive(Debug)]
+pub struct Reading {
+    pub value: Value,
+    pub images: Vec<Shown>,
+}
+
 async fn read_item(
     client: &MoodleClient,
     module: &Value,
     item: &Value,
     offset: u64,
     limit: usize,
-) -> Result<Value, String> {
+    with_figures: bool,
+) -> Result<Reading, String> {
     let name = item["filename"].as_str().ok_or(FORMAT_ERROR)?;
     let extension = Path::new(name)
         .extension()
@@ -148,11 +175,17 @@ async fn read_item(
     }
     let (body, content_type) = fetch(client, item).await?;
     let mut figures = None;
+    // Se conserva el original solo si hay que adjuntar figuras del fragmento leído.
+    let mut original = None;
+    let mut page_starts = Vec::new();
     let document = if let Some(kind) = office_kind {
         if !body.starts_with(b"PK") {
             return Err(
                 "La respuesta no es un documento de Office. Comprueba el acceso al archivo.".into(),
             );
+        }
+        if with_figures && kind == office::Kind::Pptx {
+            original = Some(body.clone());
         }
         tokio::task::spawn_blocking(move || office::extract(kind, &body))
             .await
@@ -161,20 +194,24 @@ async fn read_item(
         if !body.starts_with(b"%PDF-") {
             return Err("La respuesta no es un PDF. Comprueba el acceso al archivo.".into());
         }
-        let (text, found) = tokio::task::spawn_blocking(move || {
-            let text = pdf_text(&body)?;
+        if with_figures {
+            original = Some(body.clone());
+        }
+        let (read, found) = tokio::task::spawn_blocking(move || {
+            let read = pdf_read(&body)?;
             // Solo en el primer fragmento: avisa de las páginas con figuras que el texto no recoge.
             let found = if offset == 0 {
                 crate::figures::pdf(&body)
             } else {
                 None
             };
-            Ok::<_, String>((text, found))
+            Ok::<_, String>((read, found))
         })
         .await
         .map_err(|_| "No se pudo extraer el texto de este PDF.")??;
         figures = found;
-        text
+        page_starts = read.starts;
+        read.text
     } else {
         let document = String::from_utf8_lossy(body.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&body))
             .into_owned();
@@ -194,15 +231,91 @@ async fn read_item(
     let next = offset
         .checked_add(limit as u64)
         .filter(|end| *end < total as u64);
+    let mut images = Vec::new();
+    if let Some(original) = original {
+        let end = start.saturating_add(limit);
+        images = if extension == "pdf" {
+            let pages = pages_in(&page_starts, total, start, end);
+            tokio::task::spawn_blocking(move || view::attach_pdf_pages(original, &pages))
+                .await
+                .unwrap_or_default()
+        } else {
+            let slides = slides_with_images(&document, start, end);
+            tokio::task::spawn_blocking(move || view::attach_slides(&original, &slides))
+                .await
+                .unwrap_or_default()
+        };
+    }
     let mut result = json!({"filename": name, "source_url": item["fileurl"], "module_url": module["url"],
         "text": content, "total_characters": total, "offset": offset, "next_offset": next});
     if let Some(figures) = figures {
         result["figures"] = figures;
     }
-    Ok(client.clean(result))
+    if !images.is_empty() {
+        let labels: Vec<&str> = images.iter().map(|image| image.label.as_str()).collect();
+        result["attached_figures"] = json!(labels);
+    }
+    Ok(Reading {
+        value: client.clean(result),
+        images,
+    })
 }
 
-fn pdf_text(body: &[u8]) -> Result<String, String> {
+/// Páginas (desde 1) que tienen algún carácter entre `start` y `end`.
+fn pages_in(starts: &[usize], total: usize, start: usize, end: usize) -> Vec<usize> {
+    starts
+        .iter()
+        .enumerate()
+        .filter(|(index, page_start)| {
+            let page_end = starts.get(index + 1).copied().unwrap_or(total);
+            **page_start < end && page_end > start
+        })
+        .map(|(index, _)| index + 1)
+        .collect()
+}
+
+/// Diapositivas del texto de un PPTX que tienen imágenes incrustadas y caen entre `start` y
+/// `end` (marcadas por la extracción con `--- Diapositiva N ---` y `[figuras: …]`).
+fn slides_with_images(document: &str, start: usize, end: usize) -> Vec<usize> {
+    // (número, inicio, fin, tiene imágenes)
+    let mut slides: Vec<(usize, usize, usize, bool)> = Vec::new();
+    let mut position = 0;
+    for line in document.split_inclusive('\n') {
+        let trimmed = line.trim();
+        if let Some(number) = trimmed
+            .strip_prefix("--- Diapositiva ")
+            .and_then(|rest| rest.strip_suffix(" ---"))
+            .and_then(|number| number.parse::<usize>().ok())
+        {
+            slides.push((number, position, position, false));
+        } else if trimmed.starts_with("[figuras:")
+            && (trimmed.contains(" imagen") || trimmed.contains(" imágenes"))
+            && let Some(last) = slides.last_mut()
+        {
+            last.3 = true;
+        }
+        position += line.chars().count();
+        if let Some(last) = slides.last_mut() {
+            last.2 = position;
+        }
+    }
+    slides
+        .into_iter()
+        .filter(|(_, slide_start, slide_end, images)| {
+            *images && *slide_start < end && *slide_end > start
+        })
+        .map(|(number, ..)| number)
+        .collect()
+}
+
+/// Texto de un PDF con una marca `[Página N]` al principio de cada página.
+struct PdfRead {
+    text: String,
+    /// Posición (en caracteres) donde empieza cada página en `text`.
+    starts: Vec<usize>,
+}
+
+fn pdf_read(body: &[u8]) -> Result<PdfRead, String> {
     // Algunos PDF malformados provocan panic en el extractor; no deben cerrar el servidor MCP.
     std::panic::catch_unwind(|| {
         let pdf = lopdf::Document::load_mem(body).map_err(|error| match error {
@@ -212,17 +325,27 @@ fn pdf_text(body: &[u8]) -> Result<String, String> {
         if pdf.is_encrypted() || pdf.trailer.get(b"Encrypt").is_ok() {
             return Err("El PDF está cifrado y no se puede leer sin su clave.".into());
         }
-        let mut document = String::new();
-        pdf_extract::output_doc(&pdf, &mut pdf_extract::PlainTextOutput::new(&mut document))
+        let pages = pdf_extract::extract_text_from_mem_by_pages(body)
             .map_err(|_| "No se pudo extraer el texto de este PDF.")?;
-        if document.trim().is_empty() {
+        if pages.iter().all(|page| page.trim().is_empty()) {
             return Err(
                 "El PDF no tiene texto que se pueda extraer; puede ser un escaneo. Usa view_course_file para verlo como imagen y leerlo.".into(),
             );
         }
-        Ok(document)
+        let mut text = String::new();
+        let mut starts = Vec::new();
+        for (index, page) in pages.iter().enumerate() {
+            starts.push(text.chars().count());
+            text.push_str(&format!("[Página {}]\n{}\n\n", index + 1, page.trim()));
+        }
+        Ok(PdfRead { text, starts })
     })
     .map_err(|_| "No se pudo extraer el texto de este PDF.".to_string())?
+}
+
+#[cfg(test)]
+fn pdf_text(body: &[u8]) -> Result<String, String> {
+    pdf_read(body).map(|read| read.text)
 }
 
 pub fn safe_filename(name: &str, fallback: &str) -> String {

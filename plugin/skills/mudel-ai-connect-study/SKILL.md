@@ -46,8 +46,10 @@ consultar materiales como distribuir su estudio. Recupera solo los datos necesar
   `read_course_files` (hasta 6) y continúa con `read_course_file` si hace falta más. Usa el `module_id` del
   módulo y el `file_index` que devolvió el MCP; conserva ese índice aunque otros
   elementos de `contents` sean enlaces. Sigue `next_offset` si necesitas el resto.
-- Si la respuesta depende de una figura (circuito, gráfica, esquema, diagrama) que el texto no
-  recoge (`read_course_file` avisa con `figures` en los PDF y con «[figuras]» en PPTX, DOCX y XLSX), usa `view_course_file` con el mismo `module_id` y `file_index` y las páginas
+- `read_course_file` adjunta solo, como imágenes, hasta 3 figuras de las páginas o diapositivas que lee
+  (`attached_figures` dice cuáles; `with_figures=false` lo evita). Analízalas. Si necesitas otras figuras
+  (circuito, gráfica, esquema, diagrama) que el texto no recoge (`figures` en los PDF y «[figuras]» en PPTX,
+  DOCX y XLSX las señalan), usa `view_course_file` con el mismo `module_id` y `file_index` y las páginas
   (PDF), diapositivas (PPTX) o números de imagen (DOCX y XLSX) que necesites, hasta 4 por
   consulta. Recibirás las imágenes: descríbelas y razona sobre ellas solo con lo que se ve, y
   avisa si algo no se distingue. Como no todos los clientes muestran las imágenes del chat, si el usuario quiere ver la

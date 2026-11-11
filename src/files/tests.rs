@@ -27,6 +27,7 @@ fn read_file(offset: u64) -> ReadFile {
         module_id: 90,
         file_index: 0,
         offset,
+        with_figures: false,
     }
 }
 
@@ -101,7 +102,8 @@ async fn text_and_html_reads_match_the_reference_including_unicode_offsets() {
         });
         let value = read(&client, read_file(case["offset"].as_u64().unwrap()))
             .await
-            .unwrap();
+            .unwrap()
+            .value;
         let normalized = value
             .to_string()
             .replace(&client.base_url, "https://campus.example/moodle");
@@ -176,7 +178,7 @@ async fn pdf_reads_run_through_the_binary_download_and_extraction_path() {
             binary(body, "application/pdf"),
         ]
     });
-    let result = read(&client, read_file(0)).await.unwrap();
+    let result = read(&client, read_file(0)).await.unwrap().value;
     assert!(
         result["text"]
             .as_str()
@@ -200,7 +202,8 @@ async fn missing_modules_indices_and_unenrolled_courses_never_download() {
                     course_id: 7,
                     module_id,
                     file_index,
-                    offset: 0
+                    offset: 0,
+                    with_figures: false,
                 }
             )
             .await
@@ -478,7 +481,7 @@ async fn word_documents_are_read_through_the_download_path() {
             ),
         ]
     });
-    let result = read(&client, read_file(0)).await.unwrap();
+    let result = read(&client, read_file(0)).await.unwrap().value;
     assert_eq!(result["text"], "Apuntes del tema 1");
     assert_eq!(result["filename"], "apuntes.docx");
     handle.join().unwrap();
@@ -588,6 +591,152 @@ async fn several_files_are_read_with_one_listing_and_failures_do_not_cancel_the_
             .is_err()
         );
         assert_eq!(requests.try_iter().count(), 0);
+        handle.join().unwrap();
+    }
+}
+
+fn attach_file(with_figures: bool) -> ReadFile {
+    ReadFile {
+        course_id: 7,
+        module_id: 90,
+        file_index: 0,
+        offset: 0,
+        with_figures,
+    }
+}
+
+#[test]
+fn pdf_text_carries_a_page_marker_and_the_start_of_each_page() {
+    let read = pdf_read(include_bytes!("../../tests/fixtures/text.pdf")).unwrap();
+    assert!(read.text.starts_with("[Página 1]\n"), "{}", read.text);
+    assert_eq!(read.starts, [0]);
+    assert!(read.text.contains("Apuntes de prueba"));
+}
+
+#[test]
+fn a_chunk_covers_exactly_the_pages_it_overlaps() {
+    let starts = [0, 100, 250];
+    assert_eq!(pages_in(&starts, 400, 0, 50), [1]);
+    assert_eq!(pages_in(&starts, 400, 90, 260), [1, 2, 3]);
+    assert_eq!(pages_in(&starts, 400, 100, 250), [2]);
+    assert_eq!(pages_in(&starts, 400, 250, 12_000), [3]);
+    assert!(pages_in(&starts, 400, 400, 500).is_empty());
+}
+
+#[test]
+fn only_slides_with_embedded_images_inside_the_chunk_are_picked() {
+    let document = "\n--- Diapositiva 1 ---\nUno\n[figuras: 2 imágenes; se ven con view_course_file]\n\
+\n--- Diapositiva 2 ---\nDos\n[figuras: dibujos o gráficos; se ven con view_course_file]\n\
+\n--- Diapositiva 3 ---\nTres\n\
+\n--- Diapositiva 4 ---\nCuatro\n[figuras: 1 imagen y dibujos o gráficos; se ven con view_course_file]\n";
+    let end = document.chars().count();
+    assert_eq!(slides_with_images(document, 0, end), [1, 4]);
+    // Un fragmento que empieza a mitad de la diapositiva 1 sigue contándola.
+    assert_eq!(slides_with_images(document, 30, 60), [1]);
+    assert_eq!(slides_with_images(document, 0, 1), Vec::<usize>::new());
+    assert!(slides_with_images("sin diapositivas", 0, 16).is_empty());
+}
+
+#[tokio::test]
+async fn reading_a_pdf_attaches_the_pages_with_drawings_unless_told_not_to() {
+    let mut content = String::from("BT /F1 14 Tf 20 350 Td (Circuito de prueba) Tj ET\n");
+    for step in 0..20 {
+        let offset = step * 10;
+        content.push_str(&format!(
+            "{offset} 0 m {} 50 l S 0 {offset} m 30 {} 60 {} 90 {} c S\n",
+            offset + 30,
+            offset + 20,
+            offset + 40,
+            offset + 60
+        ));
+    }
+    let body = crate::figures::tests::document(
+        &content,
+        "/Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >>",
+        &[],
+    );
+    for (with_figures, attached) in [(true, 1), (false, 0)] {
+        let body = body.clone();
+        let (client, _requests, handle) = mock_with(|base| {
+            vec![
+                response(
+                    200,
+                    &sections(base, "circuito.pdf", body.len() as u64).to_string(),
+                )
+                .into_bytes(),
+                binary(&body, "application/pdf"),
+            ]
+        });
+        let reading = read(&client, attach_file(with_figures)).await.unwrap();
+        assert!(
+            reading.value["text"]
+                .as_str()
+                .unwrap()
+                .starts_with("[Página 1]")
+        );
+        assert_eq!(reading.images.len(), attached, "{with_figures}");
+        if attached == 1 {
+            assert_eq!(reading.images[0].label, "Página 1");
+            assert_eq!(reading.value["attached_figures"], json!(["Página 1"]));
+        } else {
+            assert!(reading.value.get("attached_figures").is_none());
+        }
+        handle.join().unwrap();
+    }
+}
+
+#[tokio::test]
+async fn reading_a_pptx_attaches_the_images_of_the_slides_that_have_them() {
+    use std::io::Write as _;
+    let mut image = image::RgbImage::new(120, 80);
+    for (x, y, pixel) in image.enumerate_pixels_mut() {
+        *pixel = image::Rgb([(x % 255) as u8, (y % 255) as u8, 40]);
+    }
+    let mut png = Vec::new();
+    image::DynamicImage::ImageRgb8(image)
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+    let slide = r#"<p:sld xmlns:p="p" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="r"><p:cSld><p:spTree><p:sp><p:txBody>
+        <a:p><a:r><a:t>Esquema del lazo</a:t></a:r></a:p></p:txBody></p:sp><p:pic><a:blip r:embed="rId2"/></p:pic></p:spTree></p:cSld></p:sld>"#;
+    let rels = r#"<Relationships xmlns="r"><Relationship Id="rId2" Type="http://x/image" Target="../media/image1.png"/></Relationships>"#;
+    let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    for (name, bytes) in [
+        ("ppt/slides/slide1.xml", slide.as_bytes()),
+        ("ppt/slides/_rels/slide1.xml.rels", rels.as_bytes()),
+        ("ppt/media/image1.png", png.as_slice()),
+    ] {
+        writer
+            .start_file(name, zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(bytes).unwrap();
+    }
+    let body = writer.finish().unwrap().into_inner();
+    for (with_figures, attached) in [(true, 1), (false, 0)] {
+        let body = body.clone();
+        let (client, _requests, handle) = mock_with(|base| {
+            vec![
+                response(
+                    200,
+                    &sections(base, "lazo.pptx", body.len() as u64).to_string(),
+                )
+                .into_bytes(),
+                binary(
+                    &body,
+                    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                ),
+            ]
+        });
+        let reading = read(&client, attach_file(with_figures)).await.unwrap();
+        let text = reading.value["text"].as_str().unwrap();
+        assert!(text.contains("Esquema del lazo"), "{text}");
+        assert!(text.contains("[figuras: 1 imagen;"), "{text}");
+        assert_eq!(reading.images.len(), attached, "{with_figures}");
+        if attached == 1 {
+            assert_eq!(
+                reading.value["attached_figures"],
+                json!(["Diapositiva 1, imagen 1"])
+            );
+        }
         handle.join().unwrap();
     }
 }
