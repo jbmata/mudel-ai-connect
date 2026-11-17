@@ -1,4 +1,4 @@
-use mudel_ai_connect_server::{credentials, server::MoodleServer};
+use mudel_ai_connect_server::{credentials, server::MoodleServer, updates};
 use rmcp::{ServiceExt, transport::stdio};
 
 #[tokio::main]
@@ -10,6 +10,10 @@ async fn main() -> std::process::ExitCode {
     } else {
         credentials::Kind::Installed
     };
+    if args == ["--version"] {
+        println!("mudel-ai-connect-server {}", env!("CARGO_PKG_VERSION"));
+        return std::process::ExitCode::SUCCESS;
+    }
     if args == ["--setup"] {
         return match credentials::setup(kind) {
             Ok(()) => {
@@ -23,7 +27,7 @@ async fn main() -> std::process::ExitCode {
         };
     }
     if !args.is_empty() && args != ["--check"] {
-        eprintln!("Uso: mudel-ai-connect-server [--check | --setup] [--plugin]");
+        eprintln!("Uso: mudel-ai-connect-server [--version | --check | --setup] [--plugin]");
         return std::process::ExitCode::FAILURE;
     }
     let server = MoodleServer::from_account(kind);
@@ -38,6 +42,9 @@ async fn main() -> std::process::ExitCode {
                 std::process::ExitCode::FAILURE
             }
         };
+    }
+    if kind == credentials::Kind::Installed {
+        updates::start();
     }
     // stdout pertenece exclusivamente a MCP; nunca escribir diagnósticos ni claves aquí.
     match server.serve(stdio()).await {

@@ -4,7 +4,7 @@ Lo que falta por añadir a Mudel AI Connect y las notas de diseño que ya se han
 es de **solo lectura**: no se añade ninguna herramienta que cambie algo en Moodle, salvo guardar
 archivos en la carpeta de descargas que elige el usuario.
 
-Última revisión: 2026-11-08.
+Última revisión: 2026-11-17.
 
 ## Propuestas pendientes
 
@@ -14,7 +14,6 @@ Ordenadas por lo que aportan frente al esfuerzo. Ninguna está empezada.
 | --- | --- | --- | --- |
 | P1 | **Firmar los ejecutables** | Medio (trámites) | Es lo más urgente: ESET (detección heurística `ML/Augur`) borra el instalador sin firmar y SmartScreen avisa. SignPath Foundation firma gratis proyectos de código abierto; hay que pedir el alta y no se sabe cuánto tardan. En Mac hay que notarizar con una cuenta de desarrollador de Apple (unos 99 $ al año). |
 | P5 | **Diapositivas completas de PowerPoint** | Medio | Hoy solo salen las imágenes incrustadas. Exportar la presentación a PDF con PowerPoint (solo Windows con Office) o con LibreOffice si está instalado, y dibujar esas páginas con el mismo motor. Tarda unos segundos por archivo y depende de software externo; no se ha probado. |
-| P6 | **Buscar dentro de los archivos** | Alto | `search_course` solo busca en nombres de archivo y secciones. Buscar «termopar» y encontrar la prueba exige un índice local de texto, con su coste de disco y de actualización. |
 
 ## Notas para añadir herramientas
 
@@ -34,7 +33,8 @@ Ordenadas por lo que aportan frente al esfuerzo. Ninguna está empezada.
 - OCR dentro del instalador (alto esfuerzo y añade peso): los PDF escaneados se ven como imagen con `view_course_file`.
 - Cuestionarios: fechas, intentos y notas.
 - Mensajes de Moodle.
-- Caché local de archivos ya leídos.
+- Índice y caché persistentes en disco. La búsqueda dentro de archivos ya reutiliza texto
+  en memoria durante la conexión; se descarta al cerrar el servidor.
 - ODT, ODP y ODS.
 - Botón «Reiniciar Claude Desktop» tras instalar.
 - Probar la instalación real, `download_course_file` y la versión de Mac.

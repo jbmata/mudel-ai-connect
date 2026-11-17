@@ -45,9 +45,17 @@ El botón **Permisos** edita las cinco categorías y permite elegir la carpeta d
 descargas con el diálogo del sistema. **Copiar diagnóstico** no incluye la clave.
 Al abrirse, la ventana consulta en segundo plano la lista pública de releases de GitHub
 (`src/updates.rs`) y muestra un aviso con enlace si hay una versión más nueva, incluidas las
-betas. Solo lee: no descarga ni ejecuta nada, y si no hay red no avisa. Es la única conexión
-que hace el programa aparte de las consultas a tu Moodle. **Versiones y actualizaciones** abre
-la lista de releases.
+betas. El servidor instalado también consulta GitHub en segundo plano al iniciar MCP:
+descarga el adjunto `mudel-ai-connect-server-<plataforma>[.exe]`, exige el tamaño y
+el digest SHA-256 de la API de GitHub, y ejecuta `--version` con un límite de cinco segundos
+antes y después de sustituirlo. Comparte el bloqueo y la sustitución transaccional del
+instalador (`src/bundle.rs`), conserva cuenta y permisos y nunca rebaja una versión.
+La sesión abierta sigue con su copia; una conexión nueva carga la actualización. Sin red,
+sin adjunto válido o ante un fallo, conserva el servidor anterior y reintenta al próximo inicio.
+El binario debe ejecutarse desde la ruta instalada: las compilaciones del repositorio y el
+plugin no se actualizan de este modo. La ventana y el plugin se renuevan manualmente.
+Las peticiones a GitHub son las únicas conexiones aparte de Moodle. **Versiones y
+actualizaciones** abre la lista de releases. `--version` funciona sin cuenta ni red.
 
 **Desinstalar** quita el servidor, las entradas de los clientes y el token del programa.
 Conserva la cuenta del plugin y las preferencias. Migra las entradas y el servidor
@@ -79,7 +87,8 @@ En Windows con MSVC enlaza el runtime de C de forma estática para no exigir
 que el usuario instale Visual C++ Redistributable.
 Comprueba que el servidor incluido funciona y coincide con el del plugin. Los ZIP
 se generan con una lista de archivos públicos; no incluyen entornos ni credenciales.
-Cada plataforma recibe su instalador, plugin, licencia, guía y `SHA256SUMS.txt`.
+Cada plataforma recibe su instalador, plugin, binario para actualización automática,
+licencia, guía y `SHA256SUMS.txt`.
 El instalador incluye la licencia MIT del proyecto dentro del servidor instalado.
 Las dependencias conservan sus propias licencias.
 
@@ -194,6 +203,20 @@ Las respuestas ocultan los tokens y no propagan los mensajes del servidor en err
 no incorpora OCR. Los adjuntos deben pertenecer al curso y al mismo campus, por el
 endpoint `webservice/pluginfile.php`; el token viaja en el cuerpo POST.
 
+`search_course_files(course_id, query, file_start=0)` busca dentro de esos formatos
+reutilizando los extractores. Cada llamada revisa hasta 8 archivos con un presupuesto de
+20 segundos para su lectura y devuelve hasta 5 fragmentos de 800 caracteres, uno por archivo,
+con sus fuentes y `offset` en caracteres para ampliar con `read_course_file`. Las palabras deben
+coincidir en el mismo fragmento; se ignoran tildes y mayúsculas. Sigue `next_file_start` aunque
+una respuesta no tenga resultados. Los archivos omitidos y los errores hacen parcial la búsqueda.
+No adjunta imágenes ni hace OCR. Cada petición vuelve a comprobar el permiso de materiales
+y los contenidos accesibles del curso, conservando los índices originales de `contents`.
+El índice vive en memoria, separado por servidor/cuenta, hasta 16 MiB y 128 entradas,
+con un máximo de 2 MiB de texto por archivo. Reutiliza texto solo si Moodle proporciona fecha
+de modificación y tamaño y todos los metadatos siguen iguales; de lo contrario vuelve a descargar.
+Se descarta al cerrar el MCP y no añade archivos ni dependencias. Para un curso grande se necesitan
+varias llamadas; los fallos no se interpretan como ausencia de coincidencias.
+
 `download_course_file` solo guarda archivos de asignaturas de la cuenta conectada.
 Respeta `downloads.json`, guardado por el instalador anterior, y usa la carpeta
 Descargas del sistema si no hay elección o si la elegida ya no existe. En Windows
@@ -251,5 +274,5 @@ Pendiente:
 - Firmar los paquetes de distribución y notarizar la app de macOS. Sin firma, algunos
   antivirus pueden marcar el instalador como sospechoso (detección heurística).
 
-No se ha publicado una release nativa ni se han cambiado las configuraciones reales
-de los clientes durante las pruebas de desarrollo.
+La versión 0.2.0 ya está publicada en GitHub Releases. Las pruebas de desarrollo
+descritas aquí no cambiaron las configuraciones reales de los clientes.

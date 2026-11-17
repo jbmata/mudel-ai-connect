@@ -54,6 +54,26 @@ fn check_errors_are_utf8_and_do_not_echo_the_token() {
 }
 
 #[test]
+fn version_does_not_read_accounts_or_connect_to_moodle() {
+    let home = tempfile::tempdir().unwrap();
+    for args in [vec!["--version"], vec!["--version", "--plugin"]] {
+        let output = run(
+            base_command(home.path())
+                .args(args)
+                .env("MOODLE_URL", "invalid")
+                .env("MOODLE_TOKEN", "NeverReadThisToken"),
+            b"",
+        );
+        assert!(output.status.success());
+        assert_eq!(
+            text(&output.stdout).trim(),
+            concat!("mudel-ai-connect-server ", env!("CARGO_PKG_VERSION"))
+        );
+        assert!(output.stderr.is_empty());
+    }
+}
+
+#[test]
 fn unknown_arguments_print_usage_and_fail() {
     let home = tempfile::tempdir().unwrap();
     let output = run(base_command(home.path()).arg("--nope"), b"");
@@ -249,6 +269,7 @@ fn real_process_discovers_tools_and_rejects_invalid_calls() {
             "read_course_files",
             "save_course_figures",
             "search_course",
+            "search_course_files",
             "view_course_file",
         ]
     );
@@ -284,6 +305,16 @@ fn real_process_discovers_tools_and_rejects_invalid_calls() {
         ("get_discussion_posts", json!({"discussion_id": -3})),
         ("search_course", json!({"query": "a"})),
         ("search_course", json!({"query": "tema", "course_id": 0})),
+        ("search_course_files", json!({"course_id": 7, "query": "a"})),
+        (
+            "search_course_files",
+            json!({"course_id": 0, "query": "tema"}),
+        ),
+        ("search_course_files", json!({"query": "tema"})),
+        (
+            "search_course_files",
+            json!({"course_id": 7, "query": "tema", "file_start": -1}),
+        ),
         ("read_course_files", json!({"course_id": 7, "files": []})),
         ("read_course_file", json!({"course_id": 7, "module_id": -1})),
         ("view_course_file", json!({"course_id": 7, "module_id": -1})),

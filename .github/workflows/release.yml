@@ -54,8 +54,14 @@ jobs:
           persist-credentials: false
       - name: Preparar Rust
         run: |
-          rustup toolchain install stable --profile minimal
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
           rustup default stable
+      - name: Comprobar formato
+        run: cargo fmt -- --check
+      - name: Comprobar código
+        run: cargo clippy --locked --all-targets --features desktop -- -D warnings
+      - name: Compilar y probar
+        run: cargo test --locked --features desktop
       - name: Generar y comprobar instalador y plugin nativos
         shell: pwsh
         run: |

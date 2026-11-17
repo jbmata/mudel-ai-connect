@@ -111,6 +111,7 @@ try {
     if ($metadata.version -ne $check.version) { throw 'La versión de Rust no coincide con la del plugin.' }
     Write-Json (Join-Path $plugin 'plugin.json') $metadata
     $claudeMetadata = Get-Content -LiteralPath (Join-Path $root 'plugin/metadata/claude-plugin.json') -Raw | ConvertFrom-Json
+    if ($claudeMetadata.version -ne $check.version) { throw 'La versión de Rust no coincide con la del plugin de Claude.' }
     New-Item -ItemType Directory -Path (Join-Path $plugin '.claude-plugin') -Force | Out-Null
     Write-Json (Join-Path $plugin '.claude-plugin/plugin.json') $claudeMetadata
     foreach ($entry in @(@('mcp.json', '${PLUGIN_ROOT}'), @('.mcp.json', '${CLAUDE_PLUGIN_ROOT}'))) {
@@ -127,6 +128,14 @@ try {
     $pluginZip = Join-Path $output "mudel-ai-connect-plugin-native-$($metadata.version)-$platform.zip"
     Zip-Public $plugin $pluginZip
     $published += $pluginZip
+
+    $updateServer = Join-Path $output "mudel-ai-connect-server-$platform$suffix"
+    Copy-Item -LiteralPath $server -Destination $updateServer -Force
+    if ($onMac) {
+        & /bin/chmod 755 $updateServer
+        if ($LASTEXITCODE -ne 0) { throw 'No se pudo marcar como ejecutable la actualización de macOS.' }
+    }
+    $published += $updateServer
 
     if ($onWindows) {
         $installer = Join-Path $output 'Mudel-AI-Connect-Setup.exe'
@@ -171,6 +180,10 @@ try {
     }
     $sums = foreach ($file in $published) { (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + (Split-Path -Leaf $file) }
     Write-UTF8 (Join-Path $output 'SHA256SUMS.txt') (($sums -join "`n") + "`n")
+    # No arrastrar ZIP de otra versión al volver a empaquetar en la misma carpeta.
+    foreach ($oldPlugin in Get-ChildItem -LiteralPath $output -Filter "mudel-ai-connect-plugin-native-*-$platform.zip") {
+        if ($oldPlugin.FullName -ne $pluginZip) { Remove-Item -LiteralPath $oldPlugin.FullName -Force }
+    }
     Write-Output "Paquetes nativos: $output"
 } finally {
     $resolvedStaging = [IO.Path]::GetFullPath($staging)

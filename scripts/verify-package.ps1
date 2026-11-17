@@ -39,6 +39,11 @@ try {
         '.claude-plugin/plugin.json', "bin/$server", 'skills/setup/SKILL.md', 'skills/setup/agents/openai.yaml',
         'skills/mudel-ai-connect-study/SKILL.md', 'skills/mudel-ai-connect-study/agents/openai.yaml') | Sort-Object
     Check (($names -join '|') -ceq ($expected -join '|')) 'contiene solo los archivos públicos esperados'
+    $version = (Get-Content -LiteralPath (Join-Path $root 'plugin/metadata/plugin.json') -Raw | ConvertFrom-Json).version
+    foreach ($manifestName in @('plugin.json', '.claude-plugin/plugin.json')) {
+        $packaged = [Text.Encoding]::UTF8.GetString((Read-Entry $archive $manifestName)) | ConvertFrom-Json
+        Check ($packaged.version -ceq $version) "$manifestName lleva la versión actual"
+    }
     foreach ($pair in @(@('mcp.json', '${PLUGIN_ROOT}'), @('.mcp.json', '${CLAUDE_PLUGIN_ROOT}'))) {
         $json = [Text.Encoding]::UTF8.GetString((Read-Entry $archive $pair[0])) | ConvertFrom-Json
         $entry = $json.mcpServers.'mudel-ai-connect'
@@ -71,6 +76,10 @@ try {
     $sha = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($pluginBytes)).Replace('-', '').ToLowerInvariant()
     Check ($check.server_bytes -eq $pluginBytes.Length) 'el servidor incluido pesa lo mismo que el del plugin'
     Check ($check.server_sha256 -ceq $sha) 'el servidor incluido coincide por SHA-256 con el del plugin'
+    $updateServer = Join-Path $directory ("mudel-ai-connect-server-$Platform" + $(if ($onWindows) { '.exe' } else { '' }))
+    Check ((Get-FileHash -LiteralPath $updateServer -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $sha) 'la actualización automática coincide con el servidor del plugin'
+    $versionText = (& $updateServer --version | Out-String).Trim()
+    Check ($LASTEXITCODE -eq 0 -and $versionText -ceq "mudel-ai-connect-server $($check.version)") 'el servidor informa de su versión sin conectar con Moodle'
     $metadata = Get-Content -LiteralPath (Join-Path $root 'plugin/metadata/plugin.json') -Raw | ConvertFrom-Json
     Check ($check.version -ceq $metadata.version) 'la versión del instalador coincide con la del plugin'
 } finally {
@@ -82,7 +91,7 @@ try {
 
 Write-Output 'Huellas'
 $sums = @(Get-Content -LiteralPath (Join-Path $directory 'SHA256SUMS.txt') | Where-Object { $_ })
-Check ($sums.Count -eq 4) 'SHA256SUMS.txt cubre los cuatro archivos publicados'
+Check ($sums.Count -eq 5) 'SHA256SUMS.txt cubre los cinco archivos publicados'
 foreach ($line in $sums) {
     $digest, $name = $line -split '  ', 2
     Check ((Split-Path -Leaf $name) -ceq $name) "$name no sale del paquete"

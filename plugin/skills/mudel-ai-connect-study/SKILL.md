@@ -25,7 +25,7 @@ consultar materiales como distribuir su estudio. Recupera solo los datos necesar
 
 ## Elegir el curso y cargar contexto
 
-- Busca las herramientas `list_courses`, `get_course_context`, `search_course`,
+- Busca las herramientas `list_courses`, `get_course_context`, `search_course`, `search_course_files`,
   `read_course_file`, `read_course_files`, `view_course_file`, `save_course_figures`, `download_course_file`, `list_assignments`,
   `get_assignment_status`, `get_grades`, `list_forums`, `get_forum_discussions`,
   `get_discussion_posts`, `get_upcoming_events` y `moodle_status` en el MCP conectado.
@@ -40,6 +40,13 @@ consultar materiales como distribuir su estudio. Recupera solo los datos necesar
 - Si no sabes en qué sección está algo, usa `search_course` con una o dos palabras clave
   (no distingue tildes ni mayúsculas, y solo mira nombres y descripciones, no el interior
   de los archivos).
+- Para buscar un concepto dentro de los materiales, usa `search_course_files(course_id=..., query=...)`.
+  Devuelve hasta 5 fragmentos de 800 caracteres con fuentes y `offset`; las palabras deben aparecer
+  en el mismo fragmento. Sigue `next_file_start` para cubrir el alcance necesario aunque una
+  respuesta no tenga coincidencias. Los errores y formatos no admitidos indican búsqueda parcial.
+  Si los fragmentos responden a la duda, cítalos sin volver a leer documentos completos; amplía
+  con `read_course_file` y el `offset` recibido cuando necesites más contexto. Para resumir un
+  documento completo, léelo con las herramientas de lectura. La búsqueda no adjunta imágenes.
 - Lee los archivos relevantes con `read_course_file`, que admite PDF, Word, PowerPoint,
   Excel, HTML y texto. Las páginas y los libros de Moodle se leen igual (en los libros,
   `chapter_title` da el capítulo). Para resumir varios materiales a la vez usa

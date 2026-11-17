@@ -2,6 +2,7 @@ use std::{
     collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
+    sync::{Arc, Mutex},
 };
 
 use rmcp::{
@@ -23,8 +24,8 @@ use crate::files::{self, CourseFile, ReadFile, ReadFiles};
 use crate::moodle::{
     FORMAT_ERROR, FUNCTIONS, MoodleClient, array, id, optional_array, plain, text, utc,
 };
+use crate::search::{self, Index, SearchFiles, fold};
 use crate::view::{self, ViewFile};
-use unicode_normalization::{UnicodeNormalization, char::is_combining_mark};
 
 const PERMISSION_ERROR: &str =
     "No se pudieron leer los permisos. Vuelve a guardarlos desde el instalador.";
@@ -42,6 +43,7 @@ pub struct MoodleServer {
     client: Result<MoodleClient, String>,
     permissions_path: Result<PathBuf, String>,
     download_folder: Result<PathBuf, String>,
+    file_index: Arc<Mutex<Index>>,
     tool_router: ToolRouter<Self>,
 }
 
@@ -111,14 +113,6 @@ fn soft(value: &Value, key: &str, limit: usize) -> String {
         Value::Number(number) => number.to_string(),
         _ => String::new(),
     }
-}
-
-/// Minúsculas y sin tildes, para comparar textos.
-fn fold(text: &str) -> String {
-    text.nfkd()
-        .filter(|c| !is_combining_mark(*c))
-        .flat_map(char::to_lowercase)
-        .collect()
 }
 
 /// Títulos de los capítulos de un libro de Moodle, por la carpeta de cada capítulo.
@@ -204,6 +198,7 @@ impl MoodleServer {
             client,
             permissions_path: permissions_path(),
             download_folder: files::default_download_folder(),
+            file_index: Arc::default(),
             tool_router: Self::tool_router(),
         }
     }
@@ -611,7 +606,7 @@ impl MoodleServer {
         Ok(
             json!({"query": params.query, "results": found, "truncated": truncated,
             "courses_without_access": skipped,
-            "note": "Busca en nombres y descripciones de secciones y módulos y en nombres de archivo; no dentro del contenido de los archivos. Léelos con read_course_file."}),
+            "note": "Busca en nombres y descripciones de secciones y módulos y en nombres de archivo. Para buscar dentro del contenido usa search_course_files con un course_id."}),
         )
     }
 
@@ -852,7 +847,7 @@ impl MoodleServer {
     }
 
     #[tool(
-        description = "Busca un texto en los nombres y descripciones de secciones, módulos y archivos de un curso (o de todas las asignaturas). No busca dentro de los archivos.",
+        description = "Busca un texto en los nombres y descripciones de secciones, módulos y archivos de un curso (o de todas las asignaturas). Para buscar dentro de los archivos usa search_course_files.",
         annotations(
             read_only_hint = true,
             destructive_hint = false,
@@ -862,6 +857,26 @@ impl MoodleServer {
     )]
     async fn search_course(&self, Parameters(params): Parameters<Search>) -> CallToolResult {
         self.result(self.search(params).await)
+    }
+
+    #[tool(
+        description = "Busca dentro de los archivos de una asignatura (PDF con texto, Office, HTML y texto). Devuelve hasta 5 fragmentos breves con fuentes, sin imágenes. Continúa con next_file_start para revisar el resto; los errores indican resultados parciales.",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = true
+        )
+    )]
+    async fn search_course_files(
+        &self,
+        Parameters(params): Parameters<SearchFiles>,
+    ) -> CallToolResult {
+        let result = match self.client(Some("materials")) {
+            Ok(client) => search::search(client, &self.file_index, params).await,
+            Err(error) => Err(error),
+        };
+        self.result(result)
     }
 
     #[tool(

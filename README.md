@@ -29,9 +29,12 @@ Qué sale de tu PC:
 - **Lo que la IA lee de tus asignaturas** pasa por el proveedor de esa IA (Anthropic,
   OpenAI…), como cualquier conversación. Revisa la política de tu universidad antes de
   usarlo con materiales del curso.
-- **Avisos de versión nueva:** al abrirse, la ventana consulta la lista pública de
-  releases de GitHub para avisarte. GitHub ve tu IP, como en cualquier descarga; no se
-  envía nada tuyo y no se descarga nada sin que lo hagas tú.
+- **Actualizaciones:** al iniciar una conexión instalada, el servidor consulta las
+  releases de GitHub y descarga una versión más nueva para su plataforma. Comprueba
+  SHA-256 y que el binario arranca antes de sustituirlo; la sesión actual continúa y
+  la siguiente usa la versión nueva. GitHub ve tu IP; no recibe el token ni datos
+  de Moodle. Sin red o si falla la descarga, sigue funcionando la versión anterior.
+  La ventana también consulta GitHub para avisar de un instalador nuevo.
 - No hay telemetría. Si algo falla, **Copiar diagnóstico** te da un texto para pedir ayuda,
   con estados y rutas de tu equipo pero nunca tu token.
 
@@ -39,8 +42,9 @@ Los cambios de cada versión y sus límites conocidos están en [CHANGELOG.md](C
 
 ## Instalar
 
-Todavía no hay una release publicada. Los paquetes están en los artefactos `mudel-native-*` del
-workflow Tests de GitHub Actions, o se generan con `scripts/package.ps1`:
+Descarga los paquetes publicados desde [GitHub Releases](https://github.com/jbmata/mudel-ai-connect/releases).
+Los paquetes de desarrollo están en los artefactos `mudel-native-*` del workflow Tests
+de GitHub Actions, o se generan con `scripts/package.ps1`:
 
 - **Windows:** abre `Mudel-AI-Connect-Setup.exe`.
 - **Mac con Apple Silicon:** extrae `Mudel-AI-Connect-Setup-macos-aarch64.zip` y abre
@@ -53,6 +57,11 @@ Code, ChatGPT Work local / Codex) y pulsa **Instalar**. Su botón **Permisos** p
 elegir si la IA puede consultar asignaturas, materiales, tareas y calendario, y si puede
 descargar archivos; el MCP bloquea lo que esté desactivado. El PC debe estar encendido
 mientras uses la conexión.
+
+Una vez instalada esta versión, la **conexión MCP se actualiza automáticamente** al
+iniciarse, sin volver a introducir el token ni cambiar los permisos. La ventana de
+instalación y el plugin se renuevan descargando sus paquetes. Las versiones antiguas
+que solo mostraban avisos necesitan instalar esta versión una vez para activar el mecanismo.
 
 Los paquetes aún **no están firmados**: Windows SmartScreen y algunos antivirus pueden
 avisar o marcarlos como sospechosos por heurística. Comprueba la huella con
@@ -85,6 +94,7 @@ MCP-MOODLE/
 | `view_course_file` | Ver como imágenes las figuras de un material: páginas de un PDF (circuitos, gráficas, esquemas), imágenes de diapositivas PPTX, DOCX y XLSX, o una imagen suelta. Hasta 4 por consulta. |
 | `save_course_figures` | Guardar esas mismas figuras como PNG o JPG en tu carpeta Descargas y devolver su ruta, para verlas en cualquier cliente (necesita el permiso de descargas). |
 | `search_course` | Buscar un texto en secciones, módulos y nombres de archivo de un curso o de todas tus asignaturas. |
+| `search_course_files` | Buscar dentro de los archivos de una asignatura y obtener hasta 5 fragmentos breves con fuentes. Continúa con `next_file_start` para revisar el resto; admite los mismos formatos de texto que la lectura, sin OCR. |
 | `list_forums` | Listar los foros de un curso; el de tipo `news` tiene los avisos del profesor. |
 | `get_forum_discussions` | Leer las discusiones de un foro con su mensaje inicial. |
 | `get_discussion_posts` | Leer los mensajes de una discusión de foro. |
@@ -166,7 +176,8 @@ sus propias licencias.
 - Admite PDF con texto, DOCX, PPTX, XLSX, HTML, TXT, MD y CSV. Sin OCR, `.doc`/`.ppt`/`.xls` antiguos, vídeo ni archivos
   alojados fuera del campus.
 - Los adjuntos que no aparezcan en `core_course_get_contents` no se descargan.
-- No hay índice local ni memoria persistente de los contenidos consultados.
+- El índice de búsqueda mantiene texto en memoria durante la conexión (hasta 16 MiB),
+  separado por cuenta. No guarda materiales en disco y se descarta al cerrar el servidor.
 - Requiere un cliente con ejecución MCP local y los permisos de la cuenta.
 
 Implementado con el [SDK oficial de MCP para Rust](https://github.com/modelcontextprotocol/rust-sdk)

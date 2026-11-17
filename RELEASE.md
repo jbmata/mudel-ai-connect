@@ -2,13 +2,14 @@
 
 La aplicación es nativa (Rust). Los binarios se distribuyen como adjuntos de
 [GitHub Releases](https://github.com/jbmata/mudel-ai-connect/releases); el repositorio solo
-contiene el código fuente. La ventana avisa de versiones nuevas leyendo esas releases, así
-que cada versión tiene que publicarse ahí.
+contiene el código fuente. La conexión instalada se actualiza leyendo esas releases, y la
+ventana avisa de instaladores nuevos, así que cada versión tiene que publicarse ahí.
 
 ## Preparar la versión
 
-1. Sube la versión en `Cargo.toml` (`version`) y en `plugin/metadata/plugin.json` y
-   `plugin/metadata/claude-plugin.json`. `scripts/package.ps1` falla si no coinciden.
+1. Sube la versión en `Cargo.toml` (`version`), en la entrada del paquete de `Cargo.lock`
+   y en `plugin/metadata/plugin.json` y `plugin/metadata/claude-plugin.json`.
+   `scripts/package.ps1` falla si no coinciden los manifiestos y el instalador.
 2. Añade la entrada en [CHANGELOG.md](CHANGELOG.md): qué incluye y los límites conocidos.
 3. Ejecuta formato, Clippy y pruebas:
 
@@ -30,7 +31,9 @@ MSVC y en Mac con Apple Silicon desde el commit de `main` que vayas a etiquetar 
 ```
 
 Se crean en `dist/native/<sistema-arquitectura>/`: el instalador (`Mudel-AI-Connect-Setup.exe`
-o el ZIP de la app de Mac), el ZIP del plugin, `LICENSE`, `README.md` y `SHA256SUMS.txt`.
+o el ZIP de la app de Mac), el ZIP del plugin, el binario
+`mudel-ai-connect-server-<plataforma>[.exe]` para actualizar la conexión, `LICENSE`,
+`README.md` y `SHA256SUMS.txt`.
 Las instrucciones para compilar en este equipo Windows sin Visual C++ Build Tools están en
 [docs/DESARROLLO.md](docs/DESARROLLO.md).
 
@@ -57,11 +60,18 @@ publica sola cuando llega un commit a `main` (workflow **Release**,
 2. Cuando quieras publicar: sube la versión (ver «Preparar la versión»), actualiza el
    CHANGELOG y fusiona `dev` en `main` (con una pull request o `git merge`).
 3. El workflow **Release** lee la versión de `Cargo.toml`. Si `vX.Y.Z` aún no tiene release,
-   compila y verifica los paquetes de Windows y de Mac, crea la etiqueta y la release
+   comprueba formato, Clippy y pruebas en Windows y Mac, compila y verifica los paquetes,
+   y crea la etiqueta y la release
    (**pre-release** mientras la versión empiece por `0.`) con los instaladores, los ZIP del
-   plugin, un `SHA256SUMS-<plataforma>.txt` por plataforma y las notas tomadas de la primera
-   sección del CHANGELOG.
+   plugin, los binarios de actualización, un `SHA256SUMS-<plataforma>.txt` por plataforma
+   y las notas tomadas de la primera sección del CHANGELOG.
 4. Si fusionas en `main` sin subir la versión, no se publica nada nuevo.
+
+La conexión comprueba las releases al iniciarse, incluidas las marcadas como pre-release,
+verifica el digest SHA-256 que devuelve GitHub y prepara el servidor para la siguiente sesión.
+Publica todos los adjuntos antes de anunciar la release; sin el binario de su plataforma o
+sin digest válido, el cliente conserva su versión. El instalador antiguo y el plugin no se
+renuevan automáticamente. El primer salto desde una versión sin actualizador es manual.
 
 Para repetir una publicación que falló, borra la release y la etiqueta de esa versión y lanza
 **Release** a mano desde la pestaña Actions (*Run workflow*).

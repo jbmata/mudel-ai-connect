@@ -320,7 +320,8 @@ impl Setup {
         let Some(release) = &self.newer else { return };
         theme::notice(ui, theme::MUTED, theme::CARD, |ui| {
             ui.label(format!("Hay una versión nueva ({}).", release.version));
-            ui.hyperlink_to("Ver y descargar", &release.url);
+            ui.label("La conexión se actualiza sola al iniciarse. La ventana se renueva descargando el instalador.");
+            ui.hyperlink_to("Descargar el instalador", &release.url);
         });
         ui.add_space(10.0);
     }

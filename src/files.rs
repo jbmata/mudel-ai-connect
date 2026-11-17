@@ -150,20 +150,39 @@ pub struct Reading {
     pub images: Vec<Shown>,
 }
 
-async fn read_item(
-    client: &MoodleClient,
-    module: &Value,
-    item: &Value,
-    offset: u64,
-    limit: usize,
-    with_figures: bool,
-) -> Result<Reading, String> {
-    let name = item["filename"].as_str().ok_or(FORMAT_ERROR)?;
-    let extension = Path::new(name)
+struct Document {
+    text: String,
+    figures: Option<Value>,
+    original: Option<Vec<u8>>,
+    page_starts: Vec<usize>,
+}
+
+fn extension(name: &str) -> String {
+    Path::new(name)
         .extension()
         .and_then(|value| value.to_str())
         .unwrap_or("")
-        .to_ascii_lowercase();
+        .to_ascii_lowercase()
+}
+
+pub(crate) fn readable(item: &Value) -> bool {
+    let extension = extension(item["filename"].as_str().unwrap_or(""));
+    ["pdf", "txt", "md", "csv", "html", "htm"].contains(&extension.as_str())
+        || office::kind(&extension).is_some()
+}
+
+pub(crate) async fn full_text(client: &MoodleClient, item: &Value) -> Result<String, String> {
+    Ok(document(client, item, false, false).await?.text)
+}
+
+async fn document(
+    client: &MoodleClient,
+    item: &Value,
+    summary: bool,
+    with_figures: bool,
+) -> Result<Document, String> {
+    let name = item["filename"].as_str().ok_or(FORMAT_ERROR)?;
+    let extension = extension(name);
     let office_kind = office::kind(&extension);
     if !["pdf", "txt", "md", "csv", "html", "htm"].contains(&extension.as_str())
         && office_kind.is_none()
@@ -200,7 +219,7 @@ async fn read_item(
         let (read, found) = tokio::task::spawn_blocking(move || {
             let read = pdf_read(&body)?;
             // Solo en el primer fragmento: avisa de las páginas con figuras que el texto no recoge.
-            let found = if offset == 0 {
+            let found = if summary {
                 crate::figures::pdf(&body)
             } else {
                 None
@@ -225,6 +244,30 @@ async fn read_item(
             document
         }
     };
+    Ok(Document {
+        text: document,
+        figures,
+        original,
+        page_starts,
+    })
+}
+
+async fn read_item(
+    client: &MoodleClient,
+    module: &Value,
+    item: &Value,
+    offset: u64,
+    limit: usize,
+    with_figures: bool,
+) -> Result<Reading, String> {
+    let name = item["filename"].as_str().ok_or(FORMAT_ERROR)?;
+    let extension = extension(name);
+    let Document {
+        text: document,
+        figures,
+        original,
+        page_starts,
+    } = document(client, item, offset == 0, with_figures).await?;
     let total = document.chars().count();
     let start = usize::try_from(offset).unwrap_or(usize::MAX);
     let content: String = document.chars().skip(start).take(limit).collect();

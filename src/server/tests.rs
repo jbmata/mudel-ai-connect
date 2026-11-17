@@ -1,5 +1,5 @@
 use super::*;
-use crate::moodle::tests::{mock, response};
+use crate::moodle::tests::{mock, mock_with, response};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 fn temporary() -> PathBuf {
@@ -16,8 +16,65 @@ fn server(client: MoodleClient) -> MoodleServer {
         client: Ok(client),
         permissions_path: Ok(temporary()),
         download_folder: Ok(temporary()),
+        file_index: Arc::default(),
         tool_router: MoodleServer::tool_router(),
     }
+}
+
+#[tokio::test]
+async fn full_text_search_checks_permissions_even_with_a_warm_index() {
+    let body = "Un termopar mide temperatura.";
+    let (client, requests, handle) = mock_with(|base| {
+        let sections = json!([{"id": 1, "modules": [{"id": 90, "contents": [{
+            "type": "file", "filename": "apuntes.txt", "filesize": body.len(), "timemodified": 1,
+            "fileurl": format!("{base}/webservice/pluginfile.php/42/apuntes.txt")
+        }]}]}]);
+        vec![
+            response(200, &sections.to_string()).into_bytes(),
+            response(200, body).into_bytes(),
+        ]
+    });
+    let server = server(client.clone());
+    let other_account = MoodleServer::with_client(Ok(client));
+    assert!(!Arc::ptr_eq(&server.file_index, &other_account.file_index));
+    let params = || {
+        Parameters(SearchFiles {
+            course_id: 7,
+            query: "termopar".into(),
+            file_start: 0,
+        })
+    };
+    let found = server.search_course_files(params()).await;
+    assert_eq!(
+        found.structured_content.unwrap()["results"][0]["filename"],
+        "apuntes.txt"
+    );
+    let path = server.permissions_path.as_ref().unwrap();
+    fs::write(
+        path,
+        r#"{"courses":true,"materials":false,"assignments":true,"calendar":true,"downloads":true}"#,
+    )
+    .unwrap();
+    let denied = server.search_course_files(params()).await;
+    assert!(denied.is_error.unwrap_or(false));
+    assert!(
+        denied.content[0]
+            .as_text()
+            .unwrap()
+            .text
+            .contains("desactivada")
+    );
+    fs::write(path, "{}").unwrap();
+    assert!(
+        server
+            .search_course_files(params())
+            .await
+            .is_error
+            .unwrap_or(false)
+    );
+    assert_eq!(requests.try_iter().count(), 2);
+    fs::remove_file(path).unwrap();
+    handle.join().unwrap();
 }
 
 #[test]
