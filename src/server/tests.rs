@@ -21,6 +21,76 @@ fn server(client: MoodleClient) -> MoodleServer {
     }
 }
 
+#[test]
+fn warning_groups_preserve_ids_order_and_unexpected_values() {
+    let warnings = json!([
+        {"item": "module", "itemid": 1, "warningcode": "nopermission", "message": "Acceso parcial", "extra": "a"},
+        {"item": "module", "itemid": 7, "warningcode": "other", "message": "Otro aviso"},
+        {"item": "module", "itemid": 2, "warningcode": "nopermission", "message": "Acceso parcial", "extra": "a"},
+        {"item": "module", "itemid": 1, "warningcode": "nopermission", "message": "Acceso parcial", "extra": "a"},
+        {"item": "module", "itemid": 3, "warningcode": "nopermission", "message": "Acceso parcial", "extra": "b"},
+        {"item": "module", "itemid": "4", "warningcode": "nopermission", "message": "Acceso parcial"},
+        {"item": "module", "warningcode": "nopermission", "message": "Acceso parcial"},
+        {"item": "module", "itemid": 5, "warningcode": "nopermission", "message": "Acceso parcial", "count": 9},
+        null,
+        "aviso",
+        {"item": "module", "itemid": -1, "warningcode": "nopermission", "message": "Acceso parcial"},
+        {"item": "module", "itemid": 6, "warningcode": "nopermission", "message": "Acceso parcial", "itemids": [7]}
+    ]);
+    let grouped = group_warnings(warnings.clone());
+    assert_eq!(
+        grouped,
+        json!([
+            {"item": "module", "itemids": [1, 2, 1], "count": 3, "warningcode": "nopermission", "message": "Acceso parcial", "extra": "a"},
+            warnings[1], warnings[4], warnings[5], warnings[6], warnings[7], warnings[8], warnings[9], warnings[10], warnings[11]
+        ])
+    );
+    assert_eq!(group_warnings(json!([])), json!([]));
+    assert_eq!(
+        group_warnings(json!({"unexpected": true})),
+        json!({"unexpected": true})
+    );
+}
+
+#[tokio::test]
+async fn assignment_list_compacts_repeated_warnings_without_hiding_partial_access() {
+    let warnings: Vec<_> = (1..=272)
+        .map(|item_id| {
+            json!({
+                "item": "module", "itemid": item_id,
+                "warningcode": "nopermission", "message": "No access rights in module context"
+            })
+        })
+        .collect();
+    let raw = json!({"courses": [{"assignments": [{"id": 15, "cmid": 91,
+        "name": "Derivadas", "intro": "Enunciado", "duedate": 1700000000}]}], "warnings": warnings});
+    let (client, requests, handle) = mock(vec![response(200, &raw.to_string())]);
+    let response = server(client)
+        .list_assignments(Parameters(Assignments {
+            course_id: 7,
+            include_descriptions: false,
+        }))
+        .await
+        .structured_content
+        .unwrap();
+    assert_eq!(response["assignments"][0]["name"], "Derivadas");
+    assert!(response["assignments"][0].get("description").is_none());
+    assert_eq!(response["warnings"].as_array().unwrap().len(), 1);
+    assert_eq!(response["warnings"][0]["count"], 272);
+    assert_eq!(
+        response["warnings"][0]["itemids"],
+        json!((1..=272).collect::<Vec<_>>())
+    );
+    assert_eq!(response["warnings"][0]["warningcode"], "nopermission");
+    assert_eq!(
+        response["warnings"][0]["message"],
+        "No access rights in module context"
+    );
+    assert!(response["warnings"].to_string().len() * 4 < raw["warnings"].to_string().len());
+    assert_eq!(requests.try_iter().count(), 1);
+    handle.join().unwrap();
+}
+
 #[tokio::test]
 async fn full_text_search_checks_permissions_even_with_a_warm_index() {
     let body = "Un termopar mide temperatura.";
@@ -115,7 +185,22 @@ async fn disabled_permissions_and_invalid_arguments_do_not_make_requests() {
     let server = server(client);
     let path = server.permissions_path.as_ref().unwrap();
     fs::write(path, r#"{"courses":false,"materials":false,"assignments":false,"calendar":false,"downloads":false}"#).unwrap();
-    assert!(server.courses().await.unwrap_err().contains("desactivada"));
+    for include_descriptions in [false, true] {
+        assert!(
+            server
+                .courses(include_descriptions)
+                .await
+                .unwrap_err()
+                .contains("desactivada")
+        );
+        assert!(
+            server
+                .assignments(7, include_descriptions)
+                .await
+                .unwrap_err()
+                .contains("desactivada")
+        );
+    }
     assert!(server.events().await.unwrap_err().contains("desactivada"));
     let read = server
         .read_course_file(Parameters(ReadFile {
@@ -151,14 +236,7 @@ async fn disabled_permissions_and_invalid_arguments_do_not_make_requests() {
     );
     assert!(
         server
-            .assignments(7)
-            .await
-            .unwrap_err()
-            .contains("desactivada")
-    );
-    assert!(
-        server
-            .assignments(0)
+            .assignments(0, false)
             .await
             .unwrap_err()
             .contains("positivo")
@@ -209,9 +287,9 @@ async fn five_tools_match_the_reference_contract() {
     let server = server(client);
     let mut actual = json!({
         "moodle_status": server.result(server.status().await).structured_content.unwrap(),
-        "list_courses": server.result(server.courses().await).structured_content.unwrap(),
+        "list_courses": server.result(server.courses(true).await).structured_content.unwrap(),
         "get_course_context": server.result(server.context(Sections { course_id: 7, section_start: 0, section_limit: 3 }).await).structured_content.unwrap(),
-        "list_assignments": server.result(server.assignments(7).await).structured_content.unwrap(),
+        "list_assignments": server.result(server.assignments(7, true).await).structured_content.unwrap(),
         "get_upcoming_events": server.result(server.events().await).structured_content.unwrap(),
     });
     let fetched_at = actual["get_course_context"]
@@ -231,6 +309,96 @@ async fn five_tools_match_the_reference_contract() {
     assert_eq!(requests.len(), 6);
     assert!(requests[4].contains("courseids%5B0%5D=7"));
     handle.join().unwrap();
+}
+
+#[tokio::test]
+async fn listings_default_to_compact_without_losing_dates_warnings_or_sources() {
+    let mut fixture: Value =
+        serde_json::from_str(include_str!("../../tests/fixtures/moodle.json")).unwrap();
+    let raw = &mut fixture["responses"];
+    raw[FUNCTIONS[1]][0]["summary"] = json!(format!(
+        "<p>secret123 {}</p>",
+        "Descripción áéíóú. ".repeat(400)
+    ));
+    raw[FUNCTIONS[3]]["courses"][0]["assignments"][0]["intro"] = json!(format!(
+        "<p>secret123 {}</p>",
+        "Enunciado áéíóú. ".repeat(1000)
+    ));
+    raw[FUNCTIONS[3]]["warnings"] =
+        json!([{"warningcode": "nopermission", "message": "Acceso parcial"}]);
+    let mut outputs = Vec::new();
+    for include_descriptions in [false, true] {
+        let bodies = [FUNCTIONS[0], FUNCTIONS[1], FUNCTIONS[3]]
+            .iter()
+            .map(|function| response(200, &raw[function].to_string()))
+            .collect();
+        let (client, requests, handle) = mock(bodies);
+        let base = client.base_url.clone();
+        let server = server(client);
+        let mut course_args = json!({});
+        let mut assignment_args = json!({"course_id": 7});
+        if include_descriptions {
+            course_args["include_descriptions"] = json!(true);
+            assignment_args["include_descriptions"] = json!(true);
+        }
+        let courses = server
+            .list_courses(Parameters(serde_json::from_value(course_args).unwrap()))
+            .await;
+        let assignments = server
+            .list_assignments(Parameters(serde_json::from_value(assignment_args).unwrap()))
+            .await;
+        let output = json!({"courses": courses.structured_content.unwrap(), "assignments": assignments.structured_content.unwrap()});
+        let serialized = output.to_string();
+        assert!(!serialized.contains("secret123"));
+        outputs.push(
+            serde_json::from_str::<Value>(
+                &serialized.replace(&base, "https://campus.example/moodle"),
+            )
+            .unwrap(),
+        );
+        assert_eq!(requests.try_iter().count(), 3);
+        handle.join().unwrap();
+    }
+    let compact = &outputs[0];
+    let detailed = &outputs[1];
+    let compact_chars = compact.to_string().chars().count();
+    let detailed_chars = detailed.to_string().chars().count();
+    eprintln!(
+        "Listados simulados: {detailed_chars} caracteres con descripciones, {compact_chars} sin ellas."
+    );
+    assert!(compact_chars * 10 < detailed_chars);
+    assert!(compact["courses"]["courses"][0].get("summary").is_none());
+    assert!(
+        compact["assignments"]["assignments"][0]
+            .get("description")
+            .is_none()
+    );
+    assert!(
+        detailed["courses"]["courses"][0]["summary"]
+            .as_str()
+            .unwrap()
+            .starts_with("[REDACTED]")
+    );
+    assert!(
+        detailed["assignments"]["assignments"][0]["description"]
+            .as_str()
+            .unwrap()
+            .starts_with("[REDACTED]")
+    );
+    assert_eq!(
+        compact["assignments"]["warnings"],
+        raw[FUNCTIONS[3]]["warnings"]
+    );
+    let mut expected = detailed.clone();
+    expected["courses"]["courses"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("summary");
+    expected["assignments"]["assignments"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("description");
+    assert_eq!(*compact, expected);
 }
 
 #[tokio::test]

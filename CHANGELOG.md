@@ -1,5 +1,16 @@
 # Cambios
 
+## Sin publicar
+
+- **Avisos compactos:** `list_assignments` agrupa avisos iguales que solo difieren
+  en `itemid` y conserva sus identificadores en `itemids` con el número en `count`.
+  Un aviso individual conserva el formato anterior; los consumidores deben admitir ambos.
+- **Listados compactos:** `list_courses` omite las descripciones de cursos y
+  `list_assignments` los enunciados por defecto. Usa `include_descriptions=true`
+  para recuperarlos con sus límites anteriores. Se conservan enlaces, fechas y avisos.
+  Las instrucciones evitan cargar el temario al consultar fechas o estados y repetir
+  el listado de cursos si ya se conoce el ID.
+
 ## 0.3.0 — búsqueda en materiales, figuras y actualizaciones
 
 Pre-release para un grupo reducido de pruebas.

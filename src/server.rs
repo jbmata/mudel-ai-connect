@@ -56,6 +56,24 @@ pub struct Course {
 
 #[derive(Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub struct Courses {
+    /// Incluye las descripciones de los cursos; omítelo para listar solo identificadores y enlaces.
+    #[serde(default)]
+    include_descriptions: bool,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Assignments {
+    #[schemars(range(min = 1))]
+    course_id: i64,
+    /// Incluye los enunciados; omítelo si solo necesitas nombres, plazos y enlaces.
+    #[serde(default)]
+    include_descriptions: bool,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Sections {
     #[schemars(range(min = 1))]
     course_id: i64,
@@ -113,6 +131,55 @@ fn soft(value: &Value, key: &str, limit: usize) -> String {
         Value::Number(number) => number.to_string(),
         _ => String::new(),
     }
+}
+
+fn group_warnings(warnings: Value) -> Value {
+    let Value::Array(warnings) = warnings else {
+        return warnings;
+    };
+    let mut groups: BTreeMap<String, usize> = BTreeMap::new();
+    let mut result: Vec<Value> = Vec::new();
+    for warning in warnings {
+        let Some(fields) = warning.as_object() else {
+            result.push(warning);
+            continue;
+        };
+        let Some(item_id) = fields.get("itemid").filter(|id| id.is_u64()) else {
+            result.push(warning);
+            continue;
+        };
+        if ["item", "warningcode", "message"]
+            .iter()
+            .any(|key| !fields.get(*key).is_some_and(Value::is_string))
+            || fields.contains_key("itemids")
+            || fields.contains_key("count")
+        {
+            result.push(warning);
+            continue;
+        }
+        let mut common = fields.clone();
+        common.remove("itemid");
+        let key = Value::Object(common).to_string();
+        if let Some(&index) = groups.get(&key) {
+            let group = result[index]
+                .as_object_mut()
+                .expect("el aviso agrupado es un objeto");
+            if let Some(first) = group.remove("itemid") {
+                group.insert("itemids".into(), json!([first]));
+            }
+            let ids = group
+                .get_mut("itemids")
+                .and_then(Value::as_array_mut)
+                .expect("el grupo contiene una lista de identificadores");
+            ids.push(item_id.clone());
+            let count = ids.len();
+            group.insert("count".into(), json!(count));
+        } else {
+            groups.insert(key, result.len());
+            result.push(warning);
+        }
+    }
+    Value::Array(result)
 }
 
 /// Títulos de los capítulos de un libro de Moodle, por la carpeta de cada capítulo.
@@ -229,7 +296,7 @@ impl MoodleServer {
         self.client(None)?.status().await
     }
 
-    async fn courses(&self) -> Result<Value, String> {
+    async fn courses(&self, include_descriptions: bool) -> Result<Value, String> {
         let client = self.client(Some("courses"))?;
         let info = client.call(FUNCTIONS[0], &[]).await?;
         let courses = client
@@ -242,11 +309,13 @@ impl MoodleServer {
             .iter()
             .map(|course| {
                 let course_id = id(course, "id")?;
-                Ok(
-                    json!({"id": course_id, "name": plain(course, "fullname", usize::MAX)?,
-                "shortname": course["shortname"], "summary": plain(course, "summary", 4000)?,
-                "url": format!("{}/course/view.php?id={course_id}", client.base_url)}),
-                )
+                let mut item = json!({"id": course_id, "name": plain(course, "fullname", usize::MAX)?,
+                    "shortname": course["shortname"],
+                    "url": format!("{}/course/view.php?id={course_id}", client.base_url)});
+                if include_descriptions {
+                    item["summary"] = json!(plain(course, "summary", 4000)?);
+                }
+                Ok(item)
             })
             .collect::<Result<Vec<_>, String>>()?;
         Ok(json!({"courses": courses}))
@@ -296,7 +365,11 @@ impl MoodleServer {
             "next_section_start": if end < sections.len() { Some(end) } else { None }}))
     }
 
-    async fn assignments(&self, course_id: i64) -> Result<Value, String> {
+    async fn assignments(
+        &self,
+        course_id: i64,
+        include_descriptions: bool,
+    ) -> Result<Value, String> {
         if course_id <= 0 {
             return Err("course_id debe ser positivo.".into());
         }
@@ -310,14 +383,18 @@ impl MoodleServer {
         let mut assignments = Vec::new();
         for course in optional_array(&result, "courses")? {
             for task in optional_array(course, "assignments")? {
-                assignments.push(json!({"id": id(task, "id")?, "name": plain(task, "name", usize::MAX)?,
-                    "description": plain(task, "intro", 12000)?, "due_at_utc": utc(&task["duedate"])?,
+                let mut item = json!({"id": id(task, "id")?, "name": plain(task, "name", usize::MAX)?,
+                    "due_at_utc": utc(&task["duedate"])?,
                     "cutoff_at_utc": utc(&task["cutoffdate"])?, "opens_at_utc": utc(&task["allowsubmissionsfromdate"])?,
-                    "url": format!("{}/mod/assign/view.php?id={}", client.base_url, id(task, "cmid")?)}));
+                    "url": format!("{}/mod/assign/view.php?id={}", client.base_url, id(task, "cmid")?)});
+                if include_descriptions {
+                    item["description"] = json!(plain(task, "intro", 12000)?);
+                }
+                assignments.push(item);
             }
         }
         Ok(
-            json!({"assignments": assignments, "warnings": result.get("warnings").cloned().unwrap_or(json!([])),
+            json!({"assignments": assignments, "warnings": group_warnings(result.get("warnings").cloned().unwrap_or(json!([]))),
             "note": "Plazos devueltos por Moodle; no se ha consultado el estado de entrega (usa get_assignment_status con el id de la tarea). Verifica posibles prórrogas personales en SIFO."}),
         )
     }
@@ -642,7 +719,7 @@ impl MoodleServer {
     }
 
     #[tool(
-        description = "Lista las asignaturas de la cuenta conectada, con identificadores y enlaces.",
+        description = "Lista asignaturas con identificadores y enlaces. Solo incluye descripciones con include_descriptions=true.",
         annotations(
             read_only_hint = true,
             destructive_hint = false,
@@ -650,8 +727,8 @@ impl MoodleServer {
             open_world_hint = true
         )
     )]
-    async fn list_courses(&self) -> CallToolResult {
-        self.result(self.courses().await)
+    async fn list_courses(&self, Parameters(params): Parameters<Courses>) -> CallToolResult {
+        self.result(self.courses(params.include_descriptions).await)
     }
 
     #[tool(
@@ -668,7 +745,7 @@ impl MoodleServer {
     }
 
     #[tool(
-        description = "Consulta enunciados y plazos de tareas; no indica si están entregadas ni incluye notas.",
+        description = "Lista tareas y plazos. Para leer enunciados usa include_descriptions=true. No indica si están entregadas ni incluye notas. Los warnings agrupados contienen itemids y count; indican resultados potencialmente parciales.",
         annotations(
             read_only_hint = true,
             destructive_hint = false,
@@ -676,8 +753,14 @@ impl MoodleServer {
             open_world_hint = true
         )
     )]
-    async fn list_assignments(&self, Parameters(params): Parameters<Course>) -> CallToolResult {
-        self.result(self.assignments(params.course_id).await)
+    async fn list_assignments(
+        &self,
+        Parameters(params): Parameters<Assignments>,
+    ) -> CallToolResult {
+        self.result(
+            self.assignments(params.course_id, params.include_descriptions)
+                .await,
+        )
     }
 
     #[tool(

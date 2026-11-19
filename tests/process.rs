@@ -281,6 +281,22 @@ fn real_process_discovers_tools_and_rejects_invalid_calls() {
             "{name}"
         );
         assert_eq!(tool["annotations"]["destructiveHint"], false, "{name}");
+        if ["list_courses", "list_assignments"].contains(&name) {
+            let schema = &tool["inputSchema"];
+            assert_eq!(
+                schema["properties"]["include_descriptions"]["type"],
+                "boolean"
+            );
+            assert_eq!(
+                schema["properties"]["include_descriptions"]["default"],
+                false
+            );
+            assert!(
+                !schema["required"]
+                    .as_array()
+                    .is_some_and(|fields| fields.contains(&json!("include_descriptions")))
+            );
+        }
     }
 
     let missing = session.call("moodle_status", json!({}));
@@ -288,6 +304,11 @@ fn real_process_discovers_tools_and_rejects_invalid_calls() {
     assert!(missing.to_string().contains("MOODLE_TOKEN"), "{missing}");
 
     for (name, arguments) in [
+        ("list_courses", json!({"include_descriptions": "true"})),
+        (
+            "list_assignments",
+            json!({"course_id": 7, "include_descriptions": "true"}),
+        ),
         ("get_course_context", json!({"course_id": -1})),
         (
             "get_course_context",

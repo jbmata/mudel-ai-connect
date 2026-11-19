@@ -12,6 +12,20 @@ y `download_course_file`, y los prompts `estudiar_curso`, `preparar_examen`, `pl
 Una muestra de Moodle y sus resultados de referencia (`tests/fixtures/`) comprueban el servidor.
 El espaciado del texto extraído de un PDF puede variar según el documento.
 
+`list_courses` y `list_assignments` devuelven listados compactos por defecto:
+omiten `summary` y `description`, respectivamente. El argumento opcional
+`include_descriptions=true` recupera esos campos con los límites anteriores
+(4.000 y 12.000 caracteres). Se conservan identificadores, nombres, enlaces,
+fechas y avisos. Las instrucciones evitan cargar el temario para consultas de fechas
+o estados y reutilizan los ID ya conocidos. Los consumidores que necesiten las
+descripciones deben pedirlas explícitamente.
+
+En `list_assignments`, los avisos que solo difieren en `itemid` se agrupan en
+`warnings`: el grupo conserva los demás campos y devuelve `itemids` (en orden,
+incluidos duplicados) y `count`. Los avisos individuales e inesperados conservan su
+formato original. Los consumidores deben aceptar tanto `itemid` como `itemids` y
+seguir considerando los avisos de acceso como señal de resultados parciales.
+
 ## Instalar y usar
 
 Los paquetes están en `dist/native/<sistema-arquitectura>/`, o en los artefactos

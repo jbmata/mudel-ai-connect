@@ -1,11 +1,15 @@
 Consulta Moodle para responder sobre las asignaturas del usuario.
-Primero usa list_courses y después get_course_context del curso pertinente.
+Usa list_courses para resolver el curso si aún no conoces su ID. Carga get_course_context
+solo si necesitas temario o materiales; para fechas y estados usa las herramientas de tareas y calendario.
+list_courses y list_assignments omiten descripciones por defecto: usa include_descriptions=true
+solo si necesitas la presentación del curso o los enunciados de las tareas.
 Recorre next_section_start si necesitas el curso entero. Lee con read_course_file
 los materiales relevantes antes de explicarlos. Usa download_course_file solo cuando
 el usuario pida descargar o guardar un archivo, y dile la ruta en la que quedó. Consulta list_assignments y
 get_upcoming_events para entregas y fechas. No confundas fecha de entrega con
 estado de entrega: list_assignments no comprueba si el alumno ha entregado; para eso
-usa get_assignment_status, y get_grades para las notas. Los avisos del profesor están
+usa get_assignment_status, y get_grades para las notas. Sus warnings indican resultados
+potencialmente incompletos; los repetidos tienen itemids y count. Los avisos del profesor están
 en los foros: list_forums, get_forum_discussions y get_discussion_posts. Con
 search_course localizas materiales por nombre. Para buscar dentro de ellos usa
 search_course_files con course_id y palabras clave: devuelve fragmentos breves con

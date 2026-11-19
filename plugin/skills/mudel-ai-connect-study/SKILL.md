@@ -31,10 +31,13 @@ consultar materiales como distribuir su estudio. Recupera solo los datos necesar
   `get_discussion_posts`, `get_upcoming_events` y `moodle_status` en el MCP conectado.
   El cliente puede añadir un prefijo a los nombres. Si no están disponibles,
   explica que falta conectar el MCP antes de afirmar que has consultado Moodle.
-- Usa `list_courses` para obtener los identificadores. Puede devolver cursos de
+- Usa `list_courses` para obtener los identificadores si aún no los conoces. Devuelve
+  nombres y enlaces sin descripciones; pide `include_descriptions=true` solo si necesitas
+  la presentación de los cursos. Puede devolver cursos de
   varios años, espacios informativos y asignaturas. Resuelve el nombre y el curso
   académico solicitado; si quedan varias coincidencias plausibles, pide aclaración.
 - Usa `get_course_context(course_id=...)` para localizar el tema y sus materiales.
+  Las consultas de fechas, notas o estados de entrega no necesitan cargar el temario.
   `section_start` es una posición en la lista, no el ID de una sección. Continúa
   con `next_section_start` cuando necesites más secciones o el temario completo.
 - Si no sabes en qué sección está algo, usa `search_course` con una o dos palabras clave
@@ -104,9 +107,13 @@ publicada en Moodle; si no consta qué entra, indica qué alcance has podido ver
 
 - Consulta `list_assignments` del curso y, cuando sea pertinente, el calendario
   con `get_upcoming_events`.
+- `list_assignments` omite los enunciados por defecto para reducir el texto enviado
+  al modelo. Usa `include_descriptions=true` cuando necesites leerlos; para consultar
+  plazos o comprobar entregas bastan los identificadores y fechas del listado compacto.
 - Revisa los `warnings`: un aviso de falta de acceso significa que el resultado
   puede estar incompleto. Una lista vacía con avisos no permite concluir que no hay
-  tareas ni entregas pendientes.
+  tareas ni entregas pendientes. Los avisos repetidos se agrupan con `itemids` y
+  `count`; un aviso individual conserva `itemid`.
 - `list_assignments` no consulta el estado de entrega. Para saber si una tarea está
   entregada o calificada usa `get_assignment_status` con el `id` de la tarea, y
   `get_grades` para las notas del curso. No afirmes que está pendiente, entregada o

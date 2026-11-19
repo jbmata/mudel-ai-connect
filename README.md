@@ -83,9 +83,9 @@ MCP-MOODLE/
 | Herramienta | Función |
 | --- | --- |
 | `moodle_status` | Comprobar la conexión y las funciones disponibles. |
-| `list_courses` | Listar las asignaturas y sus identificadores. |
+| `list_courses` | Listar asignaturas, identificadores y enlaces; descripciones con `include_descriptions=true`. |
 | `get_course_context` | Consultar secciones, descripciones y materiales, con paginación. |
-| `list_assignments` | Leer enunciados y plazos de tareas. |
+| `list_assignments` | Listar tareas y plazos; enunciados con `include_descriptions=true`. |
 | `get_assignment_status` | Estado de entrega de una tarea: entregada, calificada, nota y comentarios del profesor. |
 | `get_grades` | Calificaciones de un curso, con su rango, porcentaje y comentario. |
 | `get_upcoming_events` | Consultar los próximos eventos del calendario. |
@@ -171,6 +171,7 @@ sus propias licencias.
   personales en Moodle. Las fechas se devuelven en UTC.
 - El calendario muestra el horizonte que devuelve Moodle, no todos los eventos.
 - Los avisos de falta de permiso indican resultados parciales, no ausencia de tareas.
+  En `list_assignments`, los repetidos se agrupan con `itemids` y `count`.
 - Las secciones tienen paginación y los archivos se leen en fragmentos de 12.000
   caracteres. Cada respuesta descargada admite hasta 10 MiB.
 - Admite PDF con texto, DOCX, PPTX, XLSX, HTML, TXT, MD y CSV. Sin OCR, `.doc`/`.ppt`/`.xls` antiguos, vídeo ni archivos
